@@ -19,39 +19,48 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
   }
 
   // Todo, see if there's an event passed in by onreadystatechange
-  function _rsChng(x, callback, json){
+  function _rsChng(x, callback){
     return function(){
       if (x.readyState==4 && x.status==200){
-        if (json){
-          callback(JSON.parse(x.responseText));
-        } else {
-          callback(x);
-        }
+        callback(x);
       }
     }
   }
 
-  function request(type, json){
-    json = !!json;
-    return function(url, data, callback){
-      var x = _getXmlHttp();
-      var typeOfData = typeof data;
-      if ( typeOfData === 'function' && callback === undefined){
-        callback = data;
-      } else if (typeOfData === 'object'){
-        url += "?" + _encodeData(data);
+  function request(type, url, urlData, rawData, callback, headers){
+    var x = _getXmlHttp();
+    if (urlData !== undefined){
+      if (url.indexOf("?") === -1){
+        url += "?";
+      } else {
+        url += "&"
       }
-      if (typeof callback === 'function'){
-        x.onreadystatechange = _rsChng(x, callback, json);
-      }
-      x.open(type, url, true);
-      x.send();
-    };
+      url += _encodeData(data);
+    }
+    if (typeof callback === 'function'){
+      x.onreadystatechange = _rsChng(x, callback);
+    }
+    if (headers !== undefined){
+      Lapiz.each(headers, function(key, val){
+        x.setRequestHeader(key, val);
+      });
+    }
+    x.open(type, url, true);
+    x.send(rawData);
   }
 
   $L.Ajax = {
-    get: request("GET"),
-    post: request("POST"),
-    json: request("GET", true)
+    Request: request,
+    get: function(url, data, callback){
+      request("GET", url, data, undefined, callback);
+    },
+    post: function(url, data, callback, headers){
+      request("POST", url, data, undefined, callback);
+    },
+    json: function(url, data, callback, headers){
+      request("POST", url, data, undefined, function(x){
+        callback(JSON.parse(x.responseText));
+      });
+    }
   };
 });

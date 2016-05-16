@@ -1,7 +1,9 @@
 /**
  * @namespace Lapiz
  */
-var Lapiz = Object.create(null);
+var Lapiz = (function($L) {
+  return $L || Object.create(null);
+}(Lapiz));
 
 /**
  * @namespace ModuleLoaderModule
@@ -24,10 +26,10 @@ var Lapiz = (function ModuleLoaderModule($L){
     return notLoaded;
   };
 
-  function set(name, value){
-    Object.defineProperty($L, name, { value: value });
+  function set(obj, name, value){
+    Object.defineProperty(obj, name, { value: value });
   }
-  set("set", set);
+  set($L, "set", set);
 
   function _updatePending(name){
     var i, pending, idx;
@@ -53,7 +55,7 @@ var Lapiz = (function ModuleLoaderModule($L){
     }
   }
 
-  $L.set("Module", function(name, reqs, module){
+  $L.set($L, "Module", function(name, reqs, module){
     //Not doing detailed checks here. If you're writing a module, you should be able to load it correctly.
     if (module === undefined){
       module = reqs;
@@ -78,31 +80,147 @@ var Lapiz = (function ModuleLoaderModule($L){
     return Object.keys(_loaded);
   };
   Object.freeze(self.Module);
-  
+
+  $L.set($L, "typeCheck", function(obj, type, err){
+    var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
+  $L.set($L.typeCheck, "function", function(obj, err){return $L.typeCheck(obj, Function, err)});
+  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err)});
+  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err)});
+  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err)});
+
+  $L.set($L, "assert", function(bool, err){
+    if (!bool){
+      throw new Error(err);
+    }
+  });
+
   return $L;
-})(Lapiz);Lapiz.Module("Collections", function($L){
-  $L.each = function(obj, fn){
+})(Lapiz);
+Lapiz.Module("Collections", function($L){
+  function Map(){
+    return Object.create(null);
+  };
+  $L.set($L, "Map", Map);
+
+  $L.set(Map, "method", function(obj, fn){
+    $L.typeCheck.function(fn, "Expected function");
+    $L.assert(fn.name !== "", "Require named function for method");
+    $L.set(obj, fn.name, fn);
+  });
+
+  Map.method(Map, function setterMethod(obj, fn){
+    $L.typeCheck.function(fn, "Expected function for setterMethod");
+    $L.assert(fn.name !== "", "Require named function for setterMethod");
+    Object.defineProperty(obj, fn.name, {
+      "get": function(){ return fn; },
+      "set": fn,
+    });
+  });
+
+  Map.method(Map, function prop(obj, name, desc){
+    Object.defineProperty(obj, name, desc);
+  });
+
+  Map.method(Map, function getter(obj, fn){
+    $L.typeCheck.function(fn, "Expected function for getter");
+    $L.assert(fn.name !== "", "Require named function for getter");
+    Object.defineProperty(obj, fn.name, {"get": fn,} );
+  });
+
+  Map.method(Map, function setterGetter(obj, name, setter, getter){
+    $L.typeCheck.function(setter, "Expected function for setterGetter");
+    var val;
+    var desc = {};
+    if (getter === undefined){
+      desc.get = function(){ return val; };
+    } else {
+      desc.get = function() {
+        return getter(val, obj);
+      };
+    }
+    if ($L.typeCheck.string(setter)){
+      setter = $L.parse[setter];
+    }
+    desc.set = function(newVal){
+      var setterInterface = {
+        "set": true,
+      };
+      newVal = setter.apply(setterInterface, [newVal, val, obj]);
+      if (setterInterface.set){
+        val = newVal;
+      }
+    };
+    Object.defineProperty(obj, name, desc);
+  });
+
+  Map.method(Map, function copyProps(copyTo, copyFrom){
+    //todo: write tests for this
+    var i = 2;
+    var l = arguments.length;
+    var prop;
+    for(; i<l; i+=1){
+      prop = arguments[i];
+      if (prop[0] === "&"){
+        prop = prop.substr(1);
+        Object.defineProperty(copyTo, prop, {
+          "get": (function(prop){
+            return function(){
+              return copyFrom[prop];
+            }
+          })(prop),
+          "set": (function(prop){return function(val){copyFrom[prop] = val}})(prop),
+        });
+      } else {
+        copyTo[prop] = copyFrom[prop];
+      }
+    }
+  });
+
+  Map.method($L, function Namespace(fn){
+    var self = $L.Map();
+    self.namespace = $L.Map();
+
+    Map.method(self, function set(name, value){Object.defineProperty(self.namespace, name, { value: value });});
+    Map.method(self, function prop(name, desc){Object.defineProperty(self.namespace, name, desc);});
+    Map.method(self, function method(fn){Map.method(self.namespace, fn);});
+    Map.method(self, function setterMethod(fn){Map.setterMethod(self.namespace, fn);});
+    Map.method(self, function getter(fn){Map.getter(self.namespace, fn);});
+    Map.method(self, function setterGetter(name, setter, getter){Map.setterGetter(self.namespace, name, setter, getter);});
+
+    if ($L.typeCheck.function(fn)){
+      fn.apply(self);
+      return self.namespace;
+    }
+    return self;
+  });
+
+  Map.method($L, function remove(arr, el, start){
+    var i = arr.indexOf(el, start);
+    if (i > -1) { arr.splice(i, 1); }
+  });
+
+  Map.method($L, function each(obj, fn){
     var i;
     if (obj instanceof Array){
       var l = obj.length;
       for(i=0; i<l; i+=1){
         if (fn(i, obj[i])) {return i;}
       }
+      return -1;
     } else {
       var keys = Object.keys(obj);
       for(i=keys.length-1; i>=0; i-=1){
         if (fn(keys[i], obj[keys[i]])) {return keys[i];}
       }
     }
-    return null;
-  };
+  });
 
-  $L.remove = function(arr, el){
-    var i = arr.indexOf(el);
-    if (i > -1) { arr.splice(i, 1); }
-  }
-
-  $L.ArrayConverter = function(accessor){
+  Map.method($L, function ArrayConverter(accessor){
     var arr = [];
     var index = [];
     accessor.each(function(i, obj){
@@ -127,31 +245,8 @@ var Lapiz = (function ModuleLoaderModule($L){
     });
 
     return arr;
-  };
+  });
 
-  $L.Map = function(){
-    return Object.create(null);
-  }
-
-  $L.Namespace = function(){
-    var self = $L.Map();
-    self.namespace = $L.Map();
-    function set(name, value){
-      Object.defineProperty(self.namespace, name, { value: value });
-    }
-    function method(fn){
-      if (typeof fn !== "function") {
-        throw new Error("Expected function");
-      }
-      if (fn.name === ""){
-        throw new Error("Methods require named functions");
-      }
-      self.set(fn.name, fn);
-    }
-    Object.defineProperty(self, "set", { value: set });
-    Object.defineProperty(self, "method", { value: method });
-    return self;
-  }
 });
 Lapiz.Module("Dependency", function($L){
   var _dependencies = {};
@@ -192,8 +287,8 @@ Lapiz.Module("Dependency", function($L){
   };
 });
 Lapiz.Module("Dictionary", function($L){
-  $L.set("Dictionary", function(val){
-    var _dict = {};
+  $L.set($L, "Dictionary", function(val){
+    var _dict = $L.Map();
     var _length = 0;
     var _insertEvent = Lapiz.Event();
     var _removeEvent = Lapiz.Event();
@@ -213,46 +308,46 @@ Lapiz.Module("Dictionary", function($L){
       }
     }
 
-    var self = function(field, val){
+    var self = function(key, val){
       if (val === undefined){
-        return _dict[field];
+        return _dict[key];
       }
 
       var event;
-      if (!_dict.hasOwnProperty(field)){
+      if (_dict[key] === undefined){
         _length += 1;
         event = _insertEvent;
       } else {
         event = _changeEvent;
       }
 
-      _dict[field] = val;
-      event.fire(field, self.Accessor);
+      _dict[key] = val;
+      event.fire(key, self.Accessor);
       return val;
     };
 
     self._cls = $L.Dictionary;
 
-    Object.defineProperty(self, "len", {
-      get: function(){return _length;}
+    $L.Map.getter(self, function length(){
+      return _length;
     });
 
-    self.remove = function(field){
-      if (_dict.hasOwnProperty(field)){
+    self.remove = function(key){
+      if (_dict[key] !== undefined){
         _length -= 1;
-        var obj = _dict[field];
-        delete _dict[field];
-        _removeEvent.fire(field, obj, self.Accessor);
+        var obj = _dict[key];
+        delete _dict[key];
+        _removeEvent.fire(key, obj, self.Accessor);
       }
     };
 
     self.on = $L.Map();
-    $L.Event.LinkProperty(self.on, "insert", _insertEvent);
-    $L.Event.LinkProperty(self.on, "change", _changeEvent);
-    $L.Event.LinkProperty(self.on, "remove", _removeEvent);
+    $L.Event.linkProperty(self.on, "insert", _insertEvent);
+    $L.Event.linkProperty(self.on, "change", _changeEvent);
+    $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
-    self.has = function(field){ return _dict.hasOwnProperty(field); };
+    self.has = function(key){ return _dict[key] !== undefined; };
 
     self.each = function(fn){
       var keys = Object.keys(_dict);
@@ -263,8 +358,8 @@ Lapiz.Module("Dictionary", function($L){
       }
     };
 
-    Object.defineProperty(self, "keys", {
-      get: function(){ return Object.keys(_dict); }
+    $L.Map.getter(self, function keys(){
+      return Object.keys(_dict);
     });
 
     self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
@@ -273,105 +368,97 @@ Lapiz.Module("Dictionary", function($L){
     self.Accessor = function(key){
       return _dict[key];
     };
-    self.Accessor.Accessor = self.Accessor; //meta, but necessary
-    self.Accessor.len = self.len;
-    self.Accessor.has = self.has;
-    self.Accessor.each = self.each;
-    self.Accessor.on = self.on;
-    self.Accessor.Sort = self.Sort;
-    self.Accessor.Filter = self.Filter;
+    $L.Map.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "&keys");
     self.Accessor._cls = $L.Accessor;
-    Object.defineProperty(self.Accessor, "keys", {
-      get: function(){ return Object.keys(_dict); }
-    });
-    Object.defineProperty(self.Accessor, "len", {
-      get: function(){ return _length; }
-    });
-    
+
     Object.freeze(self.Accessor);
     Object.freeze(self);
 
     return self;
   });
 
-  $L.set("Accessor", function(accessor){
+  $L.set($L, "Accessor", function(accessor){
     return accessor.Accessor;
   });
 });
-Lapiz.Module("Events", function($L){
-  $L.Event = function(){
+Lapiz.Module("Events", ["Collections"], function($L){
+  $L.set($L, "Event", function(){
     var _listeners = [];
-    var event = {
-      register: function(fn){
-        _listeners.push(fn);
-        return fn;
-      },
-      deregister: function(fn){
-        $L.remove(_listeners, fn);
-        return fn;
-      },
-      enabled: true,
-      fire: function(){
-        if (!event.enabled) { return self; }
-        var i;
-        var l = _listeners.length;
-        for(i=0; i<l; i+=1){
-          _listeners[i].apply(this, arguments);
-        }
-        return self;
-      },
-      _cls: $L.Event
-    };
-    event.register.deregister = event.deregister;
-    Object.defineProperty(event, "length", {
-      get: function(){ return _listeners.length; }
-    });
-    return event;
-  };
+    var event = Lapiz.Map();
 
-  $L.SingleEvent = function(){
+    $L.Map.setterMethod(event, function register(fn){
+      _listeners.push(fn);
+      return fn;
+    });
+
+    $L.Map.setterMethod(event.register, function deregister(fn){
+      $L.remove(_listeners, fn);
+      return fn;
+    });
+
+    $L.Map.method(event, function fire(){
+      if (!event.fire.enabled) { return event; }
+      var i;
+      var l = _listeners.length;
+      for(i=0; i<l; i+=1){
+        _listeners[i].apply(this, arguments);
+      }
+      return event;
+    });
+    $L.Map.setterGetter(event.fire, "enabled", function(enable){ return !!enable; });
+    event.fire.enabled = true;
+
+    $L.Map.getter(event.fire, function length(){ return _listeners.length; });
+
+    $L.set(event, "_cls", $L.Event);
+
+    return event;
+  });
+
+  $L.set($L, "SingleEvent", function(){
     var _event = $L.Event();
     var _hasFired = false;
     var _args;
-    var facade = {
-      register: function(fn){
-        if (_hasFired){
-          fn.apply(this, _args);
-        } else {
-          _event.register(fn);
-        }
-      },
-      deregister: function(fn){
-        if (_hasFired) { return; }
-        _event.deregister(fn);
-      },
-      fire: function(){
-        if (_hasFired) { return; }
-        _hasFired = true;
-        _args = arguments;
-        _event.fire.apply(this, _args);
-        delete _event;
-      },
-      _cls: $L.SingleEvent
-    };
-    Object.defineProperty(facade, "enabled", {
-      get: function(){ return _event.enabled; },
-      set: function(val) { _event.enabled = !!val; }
+    var facade = $L.Map();
+    $L.Map.method(facade, function register(fn){
+      if (_hasFired){
+        fn.apply(this, _args);
+      } else {
+        _event.register(fn);
+      }
     });
-    return facade;
-  };
+    $L.Map.method(facade.register, function deregister(fn){
+      if (_hasFired) { return; }
+      _event.register.deregister(fn);
+    });
+    $L.Map.method(facade, function fire(){
+      if (_hasFired) { return; }
+      _hasFired = true;
+      _args = arguments;
+      _event.fire.apply(this, _args);
+      delete _event;
+    });
+    $L.set(facade, "_cls", $L.SingleEvent);
 
-  $L.Event.LinkProperty = function(obj, name, evt){
-    Object.defineProperty(obj, name,{
+    Object.defineProperty(facade.fire, "enabled", {
+      get: function(){ return _event.fire.enabled; },
+      set: function(val) { _event.fire.enabled = val; }
+    });
+
+    return facade;
+  });
+
+  $L.set($L.Event, "linkProperty", function(obj, name, evt){
+    Object.defineProperty(obj, name, {
       get: function(){ return evt.register; },
       set: function(fn){ evt.register(fn); }
     });
-  };
+  });
 
-  $L.on = {};
+  $L.on = $L.Map();
 });
 Lapiz.Module("Filter", function($L){
-  $L.Filter = function(accessor, filterOrAttr, val){
+  $L.set($L, "Filter", function(accessor, filterOrAttr, val){
     var _index = [];
     var self = function(key){
       if (_index.indexOf(key) > -1) { return accessor(key); }
@@ -379,7 +466,7 @@ Lapiz.Module("Filter", function($L){
     self._cls = $L.Filter;
 
     var filterFn = filterOrAttr;
-    if (typeof(filterOrAttr) === "string" && val !== undefined){
+    if ($L.typeCheck.string(filterOrAttr) && val !== undefined){
       filterFn = function(key, accessor){
         return accessor(key)[filterOrAttr] === val;
       };
@@ -400,11 +487,12 @@ Lapiz.Module("Filter", function($L){
     self.has = function(key){
       return _index.indexOf(key.toString()) > -1;
     };
-    Object.defineProperty(self, "keys",{
-      get: function(){ return _index.slice(0); }
+
+    $L.Map.getter(self, function keys(){
+      return _index.slice(0);
     });
-    Object.defineProperty(self, "len",{
-      get: function(){ return _index.length; }
+    $L.Map.getter(self, function length(){
+      return _index.length;
     });
 
     self.each = function(fn){
@@ -417,9 +505,9 @@ Lapiz.Module("Filter", function($L){
     };
 
     self.on = $L.Map();
-    $L.Event.LinkProperty(self.on, "insert", _insertEvent);
-    $L.Event.LinkProperty(self.on, "change", _changeEvent);
-    $L.Event.LinkProperty(self.on, "remove", _removeEvent);
+    $L.Event.linkProperty(self.on, "insert", _insertEvent);
+    $L.Event.linkProperty(self.on, "change", _changeEvent);
+    $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
     var inFn = function(key, accessor){
@@ -489,6 +577,7 @@ Lapiz.Module("Filter", function($L){
       });
     };
 
+    //todo: potential conflict if filter function is set using filter.func = function(){...}
     if (filterFn.on !== undefined && filterFn.on.change !== undefined){
       filterFn.on.change(self.ForceRescan);
     }
@@ -504,7 +593,7 @@ Lapiz.Module("Filter", function($L){
 
     Object.freeze(self);
     return self;
-  };
+  });
 });
 Lapiz.Module("Index", function($L){
   $L.Index = function(cls, primaryFunc, domain){
@@ -573,79 +662,69 @@ Lapiz.Module("Index", function($L){
   };
 });
 Lapiz.Module("Objects", ["Events"], function($L){
-  $L.Object = function(){
-    var self = {};
-    var priv = {};
+  function _getter(self, funcOrProp){
+    if ($L.typeCheck.function(funcOrProp)) { return funcOrProp; }
+    if ($L.typeCheck.string(funcOrProp)) { return function(){ return self.attr[funcOrProp]; }; }
+  }
 
-    self.priv =  priv;
-    self.on = {};
-    priv.fire = {};
-    priv.attr = {};
+  function _setter(self, field, func){
+    if ($L.typeCheck.string(func)){
+      $L.assert($L.parse[func] !== undefined, "Lapiz.parse does not have field "+func);
+      func = $L.parse[func];
+    }
+    return function(){
+      //todo: add test for fireChange and event
+      var setterInterface = {
+        set: true,
+        fireChange: true,
+        event: undefined,
+      };
+      var val = func.apply(setterInterface, arguments);
+      if (setterInterface.set) {
+        var oldVal = self.attr[field];
+        self.attr[field] = val;
+        if (setterInterface.fireChange) {self.fire.change(self.pub);}
+        if (typeof setterInterface.event === "function") {event(self, val, oldVal);}
+      }
+    };
+  }
+
+  $L.Object = function(constructor){
+    var self = $L.Map();
+    var pub = $L.Map();
+
+    self.pub = pub;
+    self.pub.on = $L.Map();
+    self.fire = $L.Map();
+    self.attr = $L.Map();
     self._cls = $L.Object;
 
-    priv.event = function(name){
+    self.event = function(name){
       var e = $L.Event();
-      self.on[name] = e.register;
-      e.register.deregister = e.deregister;
-      Object.defineProperty(self.on, name, {
-        get: function(){ return e.register; },
-        set: function(fn){ e.register(fn); }
-      });
-      priv.fire[name] = e.fire;
-      priv.fire[name].disable = function(){ e.enabled = false; };
-      priv.fire[name].enable = function(){ e.enabled = true; };
-      priv.fire[name].enabled = function(){ return e.enabled; };
-      priv.fire[name].length = function(){ return e.length; };
-      Object.defineProperty(priv.fire[name], "length", {
-        get: function(){ return e.length; }
-      });
+      $L.Event.linkProperty(self.pub.on, name, e);
+      self.fire[name] = e.fire;
     };
 
-    priv.event("change");
-    priv.event("delete");
+    self.event("change");
+    self.event("delete");
 
-    priv.setAll = function(json){
+    self.setMany = function(json){
       var property, i;
       var keys = Object.keys(json);
-      priv.fire.change.disable();
+      var fireEnabled = self.fire.change.enabled;
+      self.fire.change.enabled = false;
       for(i=keys.length-1; i>=0; i-=1){
         property = keys[i];
-        if (self.hasOwnProperty(property)) {
-          self[property] = json[property];
+        if (Object.hasOwnProperty.call(self.pub, property)) {
+          self.pub[property] = json[property];
         }
       }
-      priv.fire.change.enable();
-      priv.fire.change(self);
+      //todo: add test for fire.enabled = false before and after setAll
+      self.fire.change.enabled = fireEnabled;
+      self.fire.change(self.pub);
     };
 
-    priv.lock = function(){
-      delete self.priv;
-      delete self.lock;
-    };
-
-    var _getter = function (funcOrProp){
-        if (funcOrProp instanceof Function) { return funcOrProp; }
-        if (typeof(funcOrProp) === "string") { return function(){ return priv.attr[funcOrProp]; }; }
-      };
-    var _setter = function (field, func){
-      if (typeof func === "string"){
-        if ($L.parse[func] === undefined){
-          throw new Error("Lapiz.parse does not have field "+func);
-        } else {
-          func = $L.parse[func];
-        }
-      }
-      return function(){
-        var setterInterface = {
-          set: true
-        };
-        var val = func.apply(setterInterface, arguments);
-        if (setterInterface.set) { priv.attr[field] = val; }
-        priv.fire.change(self);
-      };
-    };
-
-    priv.properties = function(properties, values){
+    self.properties = function(properties, values){
       var property, val, i, desc;
       var keys = Object.keys(properties);
       for(i=keys.length-1; i>=0; i-=1){
@@ -654,122 +733,139 @@ Lapiz.Module("Objects", ["Events"], function($L){
         desc = {};
 
         if (val === undefined || val === null){
-          throw "Invalid value for '" + property + "'";
-        } else if (typeof val === "function" || typeof val === "string"){
-          desc.set = _setter(property, val);
-          desc.get = _getter(property);
+          throw new Error("Invalid value for '" + property + "'");
+        } else if ($L.typeCheck.function(val)|| $L.typeCheck.string(val)){
+          desc.set = _setter(self, property, val);
+          desc.get = _getter(self, property);
         } else if (val.set !== undefined || val.get !== undefined) {
-            if (val.set !== undefined){
-              desc.set = _setter(property, val.set);
-            }
-            if (val.get !== undefined){
-              desc.get = _getter(val.get);
-            } else {
-              desc.get = _getter(property);
-            }
-        } else if (val instanceof Array){
-          desc.set = _setter(property, val[0]);
-          if (val[1] !== undefined) {
-            desc.get = _getter(val[1]);
-          } else {
-            desc.get = _getter(property);
+          if (val.set !== undefined){
+            desc.set = _setter(self, property, val.set);
           }
+          desc.get = (val.get !== undefined) ? _getter(self, val.get) : _getter(self, property);
         } else {
-          throw "Could not construct getter/setter for " + val;
+          throw new Error("Could not construct getter/setter for " + val);
         }
 
-        Object.defineProperty(self, property, desc);
+        Object.defineProperty(self.pub, property, desc);
       }
       if (values!== undefined){
-        priv.setAll(values);
+        self.setMany(values);
       };
     };
 
-    priv.argDict = function(){
-      var args = arguments.callee.caller.arguments;
-      var argNames = (arguments.callee.caller + "").match(/\([^)]*\)/g);
-      var dict = {};
-      var i,l;
-      argNames = argNames[0].match(/[\w$]+/g);
-      l = argNames.length;
-      for(i=0; i<l; i+=1){
-        dict[argNames[i]] = args[i];
-      }
-      return dict;
+    self.getter = function(getterFn){
+      $L.Map.getter(self.pub, getterFn);
     };
+
+    self.method = function(fn){
+      $L.Map.method(self.pub, fn);
+    };
+
+    if ($L.typeCheck.function(constructor)){
+      constructor.apply(self);
+    }
+
     return self;
   };
 
-  var _newClassEvent = $L.Event();
-  Object.defineProperty($L.on, "class", {
-    get: function(){ return _newClassEvent.register; },
-    set: function(fn){ _newClassEvent.register(fn); }
+  $L.Map.method($L, function argDict(){
+    var args = arguments.callee.caller.arguments;
+    var argNames = (arguments.callee.caller + "").match(/\([^)]*\)/g);
+    var dict = {};
+    var i,l;
+    argNames = argNames[0].match(/[\w$]+/g);
+    l = argNames.length;
+    for(i=0; i<l; i+=1){
+      dict[argNames[i]] = args[i];
+    }
+    return dict;
   });
-  $L.Class = function(fn){
-    var e = Lapiz.Event();
-    var ret = function(){
-      var obj = fn.apply(this, arguments);
-      if (obj === undefined) {throw new Error("Constructor did not return an object");}
-      e.fire(obj);
-      return obj;
-    };
-    ret.on = {
-      "create": e.register
-    };
+
+  var _newClassEvent = $L.Event();
+  $L.Event.linkProperty($L.on, "class", _newClassEvent);
+  $L.Class = function(fn, customObj){
+    customObj = !!customObj;
+    var newInstanceEvent = Lapiz.Event();
+    var ret;
+
+    if (customObj){
+      ret = function(){
+        var obj = fn.apply(this, arguments);
+        if (obj === undefined) {throw new Error("Constructor did not return an object");}
+        newInstanceEvent.fire(obj);
+        return obj;
+      };
+    } else {
+      ret = function(){
+        var self = Lapiz.Object();
+        var out = fn.apply(self, arguments);
+        self = (out === undefined) ? self : out;
+        newInstanceEvent.fire(self);
+        return self;
+      };
+    }
+
+    ret.on = $L.Map();
+    $L.Event.linkProperty(ret.on, "create", newInstanceEvent);
+
     _newClassEvent.fire(ret);
     return ret;
   };
-  $L.Constructor = function(fn, properties){
-    return $L.Class( function(){
-      var self = Lapiz.Object();
-      if (properties !== undefined){
-        self.priv.properties(properties);
-      }
-      fn.apply(self, arguments);
-      return self;
-    });
-  };
 });
 Lapiz.Module("Parser", function($L){
-  $L.parse = {
-    "int": function(val,rad){
-      rad = rad || 10;
-      return parseInt(val, rad);
-    },
-    "string": function (val){
-      if (val === undefined || val === null) { return ""; }
-      var type = typeof(val);
-      if (type === "string") { return val; }
-      if (type === "number") { return ""+val; }
-      var strFromMethod;
-      if ("str" in val && val.str instanceof Function) {
-        strFromMethod = val.str();
-      } else if ("toString" in val && val.toString instanceof Function) {
-        strFromMethod = val.toString();
-      }
-      if (typeof strFromMethod === "string"){
-        return strFromMethod;
-      }
-      return "" + val;
-    },
-    "bool": function(val){ return !!val; },
-    "number": function(val){ return parseFloat(val); },
-    "object": function(obj){ return obj; },
-    "relational": function(parser, obj, relationalField, getter){
-      var attrs = obj.priv.attr;
-      Object.defineProperty(obj, relationalField, {get:function(){
-        return attrs[relationalField];
-      }});
-      return function(val){
-        val = parser(val);
-        attrs[relationalField] = getter(val);
-        return val;
-      };
+  function resolveParser(parser){
+    if ($L.typeCheck.string(parser) && $L.parse[parser] !== undefined){
+      return $L.parse[parser];
     }
-  };
+    return parser;
+  }
+
+  $L.set($L, "parse", $L.Map());
+
+  $L.Map.method($L.parse, function int(val,rad){
+    if (val === true){
+      return 1;
+    } else if (val === false){
+      return 0;
+    }
+    rad = rad || 10;
+    return parseInt(val, rad);
+  });
+
+  $L.Map.method($L.parse, function string(val){
+    if (val === undefined || val === null) { return ""; }
+    var type = typeof(val);
+    if (type === "string") { return val; }
+    if (type === "number") { return ""+val; }
+    var strFromMethod;
+    if ("str" in val && val.str instanceof Function) {
+      strFromMethod = val.str();
+    } else if ("toString" in val && val.toString instanceof Function) {
+      strFromMethod = val.toString();
+    }
+    if (typeof strFromMethod === "string"){
+      return strFromMethod;
+    }
+    return "" + val;
+  });
+  $L.Map.method($L.parse, function bool(val){ return !!val; });
+  $L.Map.method($L.parse, function number(val){ return parseFloat(val); });
+  $L.Map.method($L.parse, function object(obj){ return obj; });
+  $L.Map.method($L.parse, function array(parser){
+    parser = resolveParser(parser);
+    return function(arr){
+      if (Array.isArray(arr)){
+        for(var i = 0; i<arr.length; i++){
+          arr[i] = parser(arr[i]);
+        }
+        return arr;
+      }
+      return [parser(arr)];
+    }
+  });
 });
 Lapiz.Module("Sorter", function($L){
-  $L.Sort = function(accessor, funcOrField){
+  $L.set($L, "Sort", function(accessor, funcOrField){
     var self = function(key){ return accessor(key); };
     self._cls = $L.Sort;
 
@@ -811,15 +907,9 @@ Lapiz.Module("Sorter", function($L){
     }
     _index.sort(_sortFn);
 
-    self.has = accessor.has;
-    self.Accessor = accessor;
-    self.Sort = accessor.Sort;
-    self.Filter = accessor.Filter;
-    Object.defineProperty(self, "keys",{
-      get: function(){ return _index.slice(0); }
-    });
-    Object.defineProperty(self, "len",{
-      get: function(){ return accessor.len; }
+    $L.Map.copyProps(self, accessor, "has", "Accessor", "Sort", "Filter", "&length");
+    $L.Map.getter(self, function keys(){
+      return _index.slice(0);
     });
 
     self.each = function(fn){
@@ -832,9 +922,9 @@ Lapiz.Module("Sorter", function($L){
     };
 
     self.on = $L.Map();
-    $L.Event.LinkProperty(self.on, "insert", _insertEvent);
-    $L.Event.LinkProperty(self.on, "change", _changeEvent);
-    $L.Event.LinkProperty(self.on, "remove", _removeEvent);
+    $L.Event.linkProperty(self.on, "insert", _insertEvent);
+    $L.Event.linkProperty(self.on, "change", _changeEvent);
+    $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
     Object.defineProperty(self, "func", {
@@ -890,10 +980,11 @@ Lapiz.Module("Sorter", function($L){
 
     Object.freeze(self);
     return self;
-  };
+  });
 
   //returns the index of the first value greater than or equal to the key
   $L.Sort.locationOf = function(key, index, fn, accessor, start, end) {
+    //todo: add test
     start = start || 0;
     end = end || index.length;
     var pivot = Math.floor(start + (end - start) / 2);
@@ -902,18 +993,16 @@ Lapiz.Module("Sorter", function($L){
     }
     if (end-start === 1) {
       // 1 := a>b      0 := a<=b
-      if (fn(index[pivot],  key, accessor) >= 0 ) { return start; }
-      return end;
+      return (fn(index[pivot],  key, accessor) >= 0 ) ? start : end; 
     }
-    if (fn(index[pivot], key, accessor) <= 0) {
-      return $L.Sort.locationOf(key, index, fn, accessor, pivot, end);
-    } else {
-      return $L.Sort.locationOf(key, index, fn, accessor, start, pivot);
-    }
+    return (fn(index[pivot], key, accessor) <= 0) ?
+      $L.Sort.locationOf(key, index, fn, accessor, pivot, end) :
+      $L.Sort.locationOf(key, index, fn, accessor, start, pivot);
   };
 
   //returns the index of the first value greater than key
   $L.Sort.gt = function (key, index, fn, accessor, start, end) {
+    //todo: add test
     start = start || 0;
     end = end || index.length;
     var pivot = Math.floor(start + (end - start) / 2);
@@ -922,13 +1011,10 @@ Lapiz.Module("Sorter", function($L){
     }
     if (end-start === 1) {
       // 1 := a>b      0 := a<=b
-      if (fn(index[pivot], key, accessor) < 0 ) { return start; }
-      return end;
+      return (fn(index[pivot], key, accessor) < 0 ) ? start : end; 
     }
-    if (fn(index[pivot], key, accessor) < 0) {
-      return $L.Sort.locationOf(key, index, fn, accessor, pivot, end);
-    } else {
-      return $L.Sort.locationOf(key, index, fn, accessor, start, pivot);
-    }
+    return (fn(index[pivot], key, accessor) < 0) ?
+      $L.Sort.locationOf(key, index, fn, accessor, pivot, end) :
+      $L.Sort.locationOf(key, index, fn, accessor, start, pivot);
   }
 });

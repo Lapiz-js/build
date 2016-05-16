@@ -4,14 +4,14 @@
  */
 Lapiz.Module("Template", ["Collections"], function($L){
   var self = $L.Namespace();
-  $L.set("Template", self.namespace);
+  $L.set($L, "Template", self.namespace);
   var std = $L.Namespace();
   self.set("Std", std.namespace);
 
   /*
     This could probably be done better. I like that when it finds a token,
     it replaces all instance at once.
-    
+
     Special case:
     if the template is exactly one token, it will resolve that and return it
     even if that return is not a string.
