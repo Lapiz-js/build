@@ -1,0 +1,616 @@
+// @Module UI2
+// UI library for Lapiz.
+Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
+  var ui = $L.Namespace();
+  $L.set("UI", ui.namespace);
+
+  var _nodeProp = new WeakMap();
+  function _getProperties(node){
+    var _props = _nodeProp.get(node);
+    if (_props === undefined){
+      _props = Lapiz.Map();
+      _nodeProp.set(node, _props);
+    }
+    return _props;
+  }
+
+  var _views = $L.Map();
+  
+  // _viewAttribute is the attribute that will be used to identify views
+  // it is treated as a constant and is only here for DRY
+  var _viewAttribute = 'l-view';
+
+  // _loadViews is automatically invoked. It removes any node with the l-view
+  // attribute and saves it as a view
+  function _loadViews(){
+    $L.each(document.querySelectorAll('['+_viewAttribute+']'), function(i, node){
+      _views[node.attributes[_viewAttribute].value] = node;
+      node.removeAttribute(_viewAttribute);
+      node.remove();
+    });
+  }
+
+  ui.method(function CloneView(name){
+    if (_views[name] === undefined){
+      throw new Error("View "+name+" is not defined");
+    }
+    return _views[name].cloneNode(true);
+  });
+
+  ui.method(function View(name, viewStr){
+    //TODO: this could use some work
+    var div = document.createElement("div");
+    div.innerHTML = viewStr;
+    var node = div.childNodes[0];
+    _views[name] = node;
+    node.remove();
+  });
+
+  var _attributes = $L.Map();
+  var _attributeOrder = [];
+  // @method ui.attribute users can register an attribute
+  ui.method(function attribute(name, fn, before){
+    name = name.toLocaleLowerCase();
+    if (fn === undefined){
+      //define plural
+      $L.each(name, Lapiz.UI.attribute)
+      return;
+    }
+    _attributes[name.toLowerCase()] = fn;
+    if (before === undefined){
+      _attributeOrder.push(name);
+    } else {
+      var idx = _attributeOrder.indexOf(before);
+      if (idx === -1){
+        _attributeOrder.push(name);
+      } else {
+        _attributeOrder.splice(idx, 0, name)
+      }
+    }
+  });
+
+  var _mediators = $L.Map();
+  ui.method(function mediator(mediatorName, fn){
+    if (typeof mediatorName !== "string"){
+      throw new Error("Mediator name must be a string");
+    }
+    if (_mediators[mediatorName] !== undefined){
+      throw new Error("Attempting to redefine "+mediatorName+" mediator");
+    }
+    var properties = $L.Map();
+    _mediators[mediatorName] = {
+      handler: fn,
+      properties: properties
+    };
+    var registerFn = function(propName, prop){
+      if (prop === undefined){
+        //defining many with an array
+        Lapiz.each(propName, function(key, val){
+          properties[key] = val;
+        });
+        return;
+      }
+      if (typeof propName !== "string"){
+        throw new Error("Mediator property name on "+mediatorName+" must be a string, got: "+(typeof propName));
+      }
+      properties[propName] = prop;
+    };
+    Object.defineProperty(Lapiz.UI.mediator, mediatorName, {value: registerFn});
+  });
+
+  // _attributeSorter is used to sort the order that attributes are processed
+  function _attributeSorter(a,b){
+    var ai = _attributeOrder.indexOf(a);
+    var bi = _attributeOrder.indexOf(b);
+    ai = ai < 0 ? _attributeOrder.length : ai;
+    bi = bi < 0 ? _attributeOrder.length : bi;
+    return ai-bi;
+  }
+
+  // _getAttributeKeys pulls the attribute names from a node and sorts them
+  // by _attributeOrder for processing
+  function _getAttributeKeys(node){
+    var keys = [];
+    var i;
+    for(i=0; i<node.attributes.length; i++){
+      keys.push(node.attributes[i].name);
+    }
+    keys.sort(_attributeSorter);
+    return keys;
+  }
+
+  function _inherit(node, property){
+    var _props;
+    for(;node !== null; node=node.parentNode){
+      _props = _nodeProp.get(node);
+      if (_props !== undefined && _props[property] !== undefined){
+        return _props[property];
+      }
+    }
+  }
+
+  ui.method(function bind(node, ctx, templator){
+    var cur, i, attrName, attrVal, _props;
+    if (node.nodeName.toLowerCase() === "script") { return; }
+    var _after = [];
+
+    if ($L.UI.bindState === undefined){
+      $L.UI.bindState = $L.Map();
+    } else {
+      i = $L.Map();
+      i.parent = $L.UI.bindState;
+      $L.UI.bindState = i;
+    }
+    $L.UI.bindState.proceed = true;
+    $L.UI.bindState.after = function(fn){
+      _after.push(fn);
+    };
+
+    _props = _getProperties(node);
+    if (ctx === undefined){
+      ctx = _inherit(node, 'ctx');
+    } else {
+      _props['ctx'] = ctx;
+    }
+    if (templator === undefined){
+      templator = _inherit(node, 'templator');
+      if (templator === undefined){
+        templator = $L.Template.Std.templator;
+      }
+    } else {
+      _props['templator'] = templator;
+    }
+    $L.UI.bindState.templator = templator;
+
+
+    if (node.nodeType === 3){ //TextNode
+      if (_props["template"] === undefined){
+        _props["template"] = node.textContent;
+      }
+      node.textContent = templator(_props["template"], ctx);
+    }
+    if (node.nodeType === 1){ //Element node
+      var attrTemplates = _props['attrTemplates'];
+      if (attrTemplates === undefined){
+        attrTemplates = $L.Map();
+        _props['attrTemplates'] = attrTemplates;
+      }
+      var attrKeys = _getAttributeKeys(node);
+      for(i=0; i<attrKeys.length; i++){
+        attrName = attrKeys[i];
+        if (attrTemplates[attrName] === undefined){
+          attrTemplates[attrName] = node.attributes[attrName].value;
+        }
+        attrVal = _getAttributeValue(attrTemplates[attrName], ctx, node, $L.UI.bindState.templator);
+        if (_attributes[attrName] !== undefined){
+          _attributes[attrName](node, ctx, attrVal);
+        } else {
+          node.attributes[attrName].value = attrVal;
+        }
+        if ($L.UI.bindState.proceed === false) { break; }
+      }
+    }
+
+    if (node.nodeType === 1 || node.nodeType === 11){
+      for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
+        $L.UI.bindState.next = cur.nextSibling
+        $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
+      }
+    }
+
+    $L.each(_after, function(i, fn){fn();});
+
+    $L.UI.bindState = $L.UI.bindState.parent;
+  });
+
+  var _mediatorRe = /^(\w+)\.(\w+)$/;
+  function _getAttributeValue(str, ctx, node, templator){
+    var mediatorPattern = _mediatorRe.exec(str);
+    var mediator;
+    if (mediatorPattern) {
+      mediator = _mediators[mediatorPattern[1]];
+      if (mediator) {
+        //TODO catch if mediatorPattern[2] is not in properties
+        return mediator.handler(node, ctx, mediator.properties[mediatorPattern[2]]);
+      }
+    }
+    return templator(str, ctx);
+  }
+
+  var _eventNamespace = $L.Namespace(); //Lapiz.UI.on
+  ui.set("on", _eventNamespace.namespace);
+
+  var _init = false;
+  var _initEvent = $L.SingleEvent();
+  $L.Event.LinkProperty(_eventNamespace.namespace, "loaded", _initEvent);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    _loadViews();
+    _init = true;
+    _initEvent.fire();
+
+    new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        var l = mutation.removedNodes.length;
+        var i;
+        for(i=0; i<l; i+=1){
+          _handleDeleteNode(mutation.removedNodes[i]);
+        }
+      });
+    }).observe(document.body, { childList: true, subtree:true });
+  });
+
+  function _handleDeleteNode(node){
+    var _props = _nodeProp.get(node);
+    if (_props !== undefined && _props['onRemove'] !== undefined) {
+      $L.each(_props['onRemove'], function(i, fn){ fn(); });
+    }
+    var l = node.childNodes.length;
+    var i;
+    for(i=0; i<l; i+=1){
+      _handleDeleteNode(node.childNodes[i]);
+    }
+  }
+
+  function remove(node, fn){
+    var _props = _getProperties(node);
+    if (_props['onRemove'] === undefined) {
+      _props['onRemove'] = [];
+    }
+    _props['onRemove'].push(fn);
+  }
+  Object.defineProperty(remove, "deregister", { value: function(node, fn){
+    var _props = _getProperties(node);
+    if (_props['onRemove'] === undefined) {
+      return;
+    }
+    $L.remove(_props['onRemove'], fn);
+  }});
+
+  _eventNamespace.method(remove);
+
+  function _splitRenderString(str){
+    var idx = str.indexOf(">");
+    var data = $L.Map();
+    data.view = str.substr(0,idx).trim();
+    data.append = false;
+    if (str[idx+1] === ">"){
+      idx+=1;
+      data.append = true;
+    }
+    data.selector = str.substr(idx+1).trim();
+    return data;
+  }
+
+  ui.method(function render(){
+    if (!_init){
+      var argsClsr = arguments;
+      _initEvent.register(function(){
+        $L.UI.render.apply(this, argsClsr);
+      });
+      return;
+    }
+    var argsLen = arguments.length;
+    var ctx = arguments[argsLen-1];
+    var i, target, rend, append, view;
+    if (typeof ctx === "string"){
+      ctx = {};
+    } else {
+      argsLen -= 1;
+    }
+    for(i=0; i<argsLen; i++){
+      rend = _splitRenderString(arguments[i]);
+      if (i===0){
+        target = document.querySelector(rend.selector);
+        append = rend.append;
+        view = document.createDocumentFragment()
+        view.appendChild(Lapiz.UI.CloneView(rend.view));
+        Lapiz.UI.bind(view, ctx, Lapiz.Template.Std.templator);
+      } else {
+        if (rend.selector === ""){
+          rend.target = view;
+        } else {
+          rend.target = view.querySelector(rend.selector);
+        }
+        if (rend.target === null){
+          test = view;
+          throw new Error("Query selector could not match "+rend.selector);
+        }
+        rend.view = $L.UI.CloneView(rend.view);
+        $L.UI.bind(rend.view, ctx, Lapiz.Template.Std.templator);
+        if (!append){ rend.target.innerHTML = "";}
+        rend.target.appendChild(rend.view);
+      }
+    }
+    if (!append){ target.innerHTML = "";}
+    target.appendChild(view);
+  });
+
+  ui.method(function id(elId, doc){
+    return (doc || document).getElementById(elId);
+  });
+
+  $L.UI.attribute("resolver", function(node, ctx, resolver){
+    var _props = _getProperties(node);
+    var templator = $L.Template.Templator($L.Template.Std.tokenizer, resolver);
+    _props["templator"] = templator;
+    $L.UI.bindState.templator = templator;
+  });
+
+});Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
+
+  $L.UI.attribute("if", function(node, _, attrVal){
+    if (typeof(attrVal) === "function") {attrVal = attrVal();}
+    node.removeAttribute("if");
+    if (!attrVal){
+      var parent = node.parentNode;
+      parent.removeChild(node);
+      $L.UI.bindState.proceed = false;
+    }
+  });
+
+  $L.UI.attribute("repeat", function(node, _, collection){
+    var templator = $L.UI.bindState.templator;
+    if (collection === undefined){
+      throw("Expected collection, got: " + collection);
+    }
+    var insFn, delFn;
+    var index = $L.Map();
+    var parent = node.parentNode;
+
+    var end = node.ownerDocument.createComment("end of repeat");
+    parent.insertBefore(end, node);
+    node.removeAttribute("repeat");
+
+    var nodeTemplate = node.cloneNode(true); // it may be possible to do this without making a copy.
+    var fn = function(key, val){
+      var clone = nodeTemplate.cloneNode(true);
+      index[key] = clone;
+      $L.UI.bind(clone, val, templator);
+      parent.insertBefore(clone, end);
+    };
+    if (collection.each instanceof Function){
+      collection.each(fn);
+    } else {
+      $L.each(collection, fn);
+    }
+
+    if (collection.on !== undefined){
+      if (collection.on.insert !== undefined){
+        insFn = function(key, accessor){
+          var clone = nodeTemplate.cloneNode(true);
+          var keys = accessor.keys;
+          var i = keys.indexOf(key);
+
+          if (i === keys.length-1){
+              parent.insertBefore(clone, end);
+          } else {
+            //insert before something
+            parent.insertBefore(clone, index[keys[i+1]]);
+          }
+
+          index[key] = clone;
+          $L.UI.bind(clone, accessor(key));
+        };
+        collection.on.insert(insFn);
+        Lapiz.UI.on.remove(parent, function(){
+          collection.on.insert.deregister(insFn);
+        });
+      }
+
+      if (collection.on.remove !== undefined){
+        delFn = function(key, obj, accessor){
+          var n = index[key];
+          delete index[key];
+          n.parentNode.removeChild(n);
+        };
+        collection.on.remove(delFn);
+        Lapiz.UI.on.remove(parent, function(){
+          collection.on.insert.deregister(delFn);
+        });
+      }
+
+      if (collection.on.change !== undefined && delFn !== undefined && insFn !== undefined){
+        chgFn = function(key, obj, accessor){
+          delFn(key, obj, accessor);
+          insFn(key, obj, accessor);
+        }
+        collection.on.change(chgFn);
+        Lapiz.UI.on.remove(parent, function(){
+          collection.on.change.deregister(chgFn);
+        });
+      }
+    }
+
+    node.parentNode.removeChild(node);
+    $L.UI.bindState.proceed = false;
+  }); //End Repeat attribute
+
+  var _liveNodes = new WeakMap();
+  $L.UI.attribute("live", function(node, context, altCtx){
+    var ctx = altCtx || context;
+    var fn;
+    if (ctx.hasOwnProperty("on") && ctx.on.hasOwnProperty("change")  && !_liveNodes.get(node)){
+      _liveNodes.set(node, true);
+      fn = function(){
+        $L.UI.bind(node);
+      };
+      ctx.on.change(fn);
+      Lapiz.UI.on.remove(node, function(){
+        ctx.on.change.deregister(fn);
+      });
+    }
+  });
+
+  $L.UI.attribute("click", function(node, _, fn){
+    if (typeof(fn) !== "function") { throw new Error("Expected function"); }
+    node.addEventListener("click", fn);
+  });
+  $L.UI.attribute("display", function(node, ctx, fn){
+    if (typeof(fn) !== "function") { throw "Expected function"; }
+    fn(node,ctx);
+  });
+
+  function _getForm(node){
+    while(node.tagName !== "FORM"){
+      node = node.parentNode;
+      if (!("tagName" in node)) { new Error("Node not in a form"); }
+    }
+    return node;
+  }
+
+  function _getFormValues (form) {
+    var nameQuery = form.querySelectorAll("[name]");
+    var i, n;
+    var data = {};
+    for(i=nameQuery.length-1; i>=0; i-=1){
+      n = nameQuery[i];
+      data[ n.name ] = n.value;
+    }
+    return data;
+  }
+
+  $L.UI.mediator("form", function(node, _, fn){
+    var form;
+    return function(evt){
+      if (form === undefined){
+        form = _getForm(node);
+      }
+      if (!fn(_getFormValues(form)) && evt && evt.preventDefault){
+        evt.preventDefault();
+      }
+    };
+  });
+
+  var _hash = $L.Map();
+  $L.UI.attribute("hash", function(node){
+    var hash = node.getAttribute("hash");
+    node.removeAttribute("hash");
+    node.setAttribute("href", "#" + hash);
+  });
+
+  $L.UI.hash = function(hash, fn, ctx){
+    var args = Array.prototype.slice.call(arguments);
+    if (args.length === 0){
+      throw new Error("Hash requires at least one arg");
+    }
+    var hash = args.splice(0,1)[0];
+    var fn = args[0];
+    var ctx = args[1];
+    if (args.length === 0){
+      Lapiz.each(hash, function(key, val){
+        if (Array.isArray(val) && val.length == 2){
+          $L.UI.hash(key, val[0], val[1]);
+        } else {
+          $L.UI.hash(key, val);
+        }
+      });
+    } else if (typeof(args[0]) === "string"){
+      _hash[hash] = function(){
+        $L.UI.render.apply(this, args);
+      };
+    } else if (typeof(args[0]) === "function"){
+      _hash[hash] = fn;
+    }
+  };
+
+  window.addEventListener("popstate", function(e){
+    if (e.target !== undefined && e.target.location !== undefined && e.target.location.hash !== undefined){
+      var args = e.target.location.hash.substr(1).split("/");
+      var hash = args.shift();
+      if (_hash[hash] !== undefined){ _hash[hash].apply(this, args); }
+    }
+  });
+
+  $L.UI.on.loaded(function(){
+    var args = document.location.hash.substr(1).split("/");
+    var hash = args.shift();
+    if (_hash[hash] !== undefined){ _hash[hash].apply(this, args); }
+  });
+
+  $L.UI.mediator("viewMethod", function viewMethod(node, ctx, method){
+    //Todo:
+    // - accept multiple view methods
+    // - get name from function
+    return function innerViewMethod(){
+      var args = Array.prototype.slice.call(arguments); // get args
+      args.splice(0,0, node, ctx); // prepend node and ctx
+      return method.apply(this, args);
+    };
+  });
+
+  //q for query syntax or quick
+  var qRe = {
+    id: /\(?#(\w+)\)?/,
+    cls: /\(?\.(\w+)\)?/g,
+    attr: /\[(\w+)=([^\]]*)\]/g
+  };
+
+  $L.UI.attribute("q", function(node, _, attrVal){
+    var cls, attr, id;
+    var clsVals = [node.className];
+    if (clsVals[0] === ''){ clsVals = []; }
+
+    id = qRe.id.exec(attrVal);
+    if (id && node.id === ""){
+      node.id = id[1];
+    }
+
+    while ( !!(cls = qRe.cls.exec(attrVal)) === true ){
+      clsVals.push(cls[1]);
+    }
+    node.className = clsVals.join(' ');;
+
+    while ( !!(attr = qRe.attr.exec(attrVal)) === true ){
+      node.setAttribute(attr[1], attr[2]);
+    }
+
+    node.removeAttribute("q");
+  });
+
+  $L.UI.mediator("view", function(node, ctx, viewOrGenerator){
+    return function(){
+      var view;
+      var viewCtx;
+      if (typeof(viewOrGenerator) === "function" ){
+        viewOrGenerator = viewOrGenerator(node, ctx);
+      }
+      if (typeof(viewOrGenerator) === "string"){
+        view = viewOrGenerator;
+        viewCtx = ctx;
+      } else {
+        if (viewOrGenerator.hasOwnProperty("view")){
+          view = viewOrGenerator.view;
+          if (viewOrGenerator.hasOwnProperty("ctx")){
+            viewCtx = viewOrGenerator.ctx;
+          }
+        }
+        throw new Error("An invalid view was given or generated");
+      }
+      $L.UI.render(view, viewCtx);
+    };
+  });
+
+  Lapiz.UI.mediator("resolver", function(node, ctx, resolverFn){
+    return resolverFn(node, ctx);
+  });
+
+  $L.UI.attribute("selectVal", function(node, ctx, val){
+    node.removeAttribute("selectVal");
+    val = $L.parse.string(val);
+    $L.UI.bindState.after(function(){
+      var children = node.children;
+      $L.each(children, function(_, child){
+        if (child.tagName === "OPTION" && child.value === val){
+          child.selected = true;
+          return true;
+        }
+      });
+    });
+  });
+
+  $L.UI.attribute("change", function(node, _, fn){
+    if (typeof(fn) !== "function") { throw "Expected function"; }
+    node.addEventListener("change", fn);
+  });
+});
