@@ -117,11 +117,11 @@ var Lapiz = (function ModuleLoaderModule($L){
     return typeCheck;
   });
 
-  // > Lapiz.typeCheck.function(obj)
-  // > Lapiz.typeCheck.function(obj, err)
+  // > Lapiz.typeCheck.func(obj)
+  // > Lapiz.typeCheck.func(obj, err)
   // Checks if the object is a function. If a string is supplied for err, it
   // will throw err if obj is not a function.
-  $L.set($L.typeCheck, "function", function(obj, err){return $L.typeCheck(obj, Function, err)});
+  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, Function, err)});
 
   // > Lapiz.typeCheck.array(obj)
   // > Lapiz.typeCheck.array(obj, err)
@@ -165,15 +165,15 @@ Lapiz.Module("Collections", function($L){
   };
   $L.set($L, "Map", Map);
 
-  // > Lapiz.Map.method(obj, namedFunc)
+  // > Lapiz.Map.meth(obj, namedFunc)
   // Attaches a method to an object. The method must be a named function.
   /* >
   var x = Lapiz.Map();
-  Lapiz.Map.method(x, function foo(){...});
+  Lapiz.Map.meth(x, function foo(){...});
   x.foo(); //calls foo
   */
-  $L.set(Map, "method", function(obj, fn){
-    $L.typeCheck.function(fn, "Expected function");
+  $L.set(Map, "meth", function(obj, fn){
+    $L.typeCheck.func(fn, "Expected function");
     $L.assert(fn.name !== "", "Require named function for method");
     $L.set(obj, fn.name, fn);
   });
@@ -182,14 +182,14 @@ Lapiz.Module("Collections", function($L){
   // Attaches a setter method to an object. The method must be a named function.
   /* >
   var x = Lapiz.Map();
-  Lapiz.Map.method(x, function foo(val){...});
+  Lapiz.Map.meth(x, function foo(val){...});
 
   //these two calls are equivalent
   x.foo("bar");
   x.foo = "bar";
   */
-  Map.method(Map, function setterMethod(obj, fn){
-    $L.typeCheck.function(fn, "Expected function for setterMethod");
+  Map.meth(Map, function setterMethod(obj, fn){
+    $L.typeCheck.func(fn, "Expected function for setterMethod");
     $L.assert(fn.name !== "", "Require named function for setterMethod");
     Object.defineProperty(obj, fn.name, {
       "get": function(){ return fn; },
@@ -199,7 +199,7 @@ Lapiz.Module("Collections", function($L){
 
   // > Lapiz.Map.prop(obj, name, desc)
   // Just a wrapper around Object.defineProperty
-  Map.method(Map, function prop(obj, name, desc){
+  Map.meth(Map, function prop(obj, name, desc){
     Object.defineProperty(obj, name, desc);
   });
 
@@ -216,8 +216,8 @@ Lapiz.Module("Collections", function($L){
   console.log(x.foo); //0
   console.log(x.foo); //1
   */
-  Map.method(Map, function getter(obj, fn){
-    $L.typeCheck.function(fn, "Expected function for getter");
+  Map.meth(Map, function getter(obj, fn){
+    $L.typeCheck.func(fn, "Expected function for getter");
     $L.assert(fn.name !== "", "Require named function for getter");
     Object.defineProperty(obj, fn.name, {"get": fn,} );
   });
@@ -252,8 +252,8 @@ Lapiz.Module("Collections", function($L){
   console.log(x.foo); // value will still be 12
 
   */
-  Map.method(Map, function setterGetter(obj, name, setter, getter){
-    $L.typeCheck.function(setter, "Expected function for setterGetter");
+  Map.meth(Map, function setterGetter(obj, name, setter, getter){
+    $L.typeCheck.func(setter, "Expected function for setterGetter");
     var val;
     var desc = {};
     if (getter === undefined){
@@ -292,7 +292,7 @@ Lapiz.Module("Collections", function($L){
   B.y = "Test";
   console.log(A.y); // Test
   */
-  Map.method(Map, function copyProps(copyTo, copyFrom){
+  Map.meth(Map, function copyProps(copyTo, copyFrom){
     //todo: write tests for this
     var i = 2;
     var l = arguments.length;
@@ -326,7 +326,7 @@ Lapiz.Module("Collections", function($L){
   /* >
   var x = Lapiz.Namespace();
   x.set("foo", "bar");
-  x.method(function sayHello(name){
+  x.meth(function sayHello(name){
     console.log("Hello, "+name);
   });
   console.log(x.namespace.foo); // bar
@@ -337,7 +337,7 @@ Lapiz.Module("Collections", function($L){
   /* >
   var x = Lapiz.Namespace(function(){
     this.set("foo", "bar");
-    this.method(function sayHello(name){
+    this.meth(function sayHello(name){
       console.log("Hello, "+name);
     });
   });
@@ -347,23 +347,23 @@ Lapiz.Module("Collections", function($L){
   */
   // * namespace.set(name, value)
   // * namespace.prop(name, desc)
-  // * namespace.method(namedFunc)
+  // * namespace.meth(namedFunc)
   // * namespace.setterMethod(namedSetterFunc)
   // * namespace.getter(namedGetterFunc)
   // * namespace.setterGetter(name, setter, getter)
   // * namespace.setterGetter(name, setter)
-  Map.method($L, function Namespace(fn){
+  Map.meth($L, function Namespace(fn){
     var self = $L.Map();
     self.namespace = $L.Map();
 
-    Map.method(self, function set(name, value){Object.defineProperty(self.namespace, name, { value: value });});
-    Map.method(self, function prop(name, desc){Object.defineProperty(self.namespace, name, desc);});
-    Map.method(self, function method(fn){Map.method(self.namespace, fn);});
-    Map.method(self, function setterMethod(fn){Map.setterMethod(self.namespace, fn);});
-    Map.method(self, function getter(fn){Map.getter(self.namespace, fn);});
-    Map.method(self, function setterGetter(name, setter, getter){Map.setterGetter(self.namespace, name, setter, getter);});
+    Map.meth(self, function set(name, value){Object.defineProperty(self.namespace, name, { value: value });});
+    Map.meth(self, function prop(name, desc){Object.defineProperty(self.namespace, name, desc);});
+    Map.meth(self, function meth(fn){Map.meth(self.namespace, fn);});
+    Map.meth(self, function setterMethod(fn){Map.setterMethod(self.namespace, fn);});
+    Map.meth(self, function getter(fn){Map.getter(self.namespace, fn);});
+    Map.meth(self, function setterGetter(name, setter, getter){Map.setterGetter(self.namespace, name, setter, getter);});
 
-    if ($L.typeCheck.function(fn)){
+    if ($L.typeCheck.func(fn)){
       fn.apply(self);
       return self.namespace;
     }
@@ -380,7 +380,7 @@ Lapiz.Module("Collections", function($L){
   Lapiz.remove(arr,1);
   console.log(arr); //[3,4,1,5,9]
   */
-  Map.method($L, function remove(arr, el, start){
+  Map.meth($L, function remove(arr, el, start){
     var i = arr.indexOf(el, start);
     if (i > -1) { arr.splice(i, 1); }
   });
@@ -406,7 +406,7 @@ Lapiz.Module("Collections", function($L){
     console.log(key, val);
   });
   */
-  Map.method($L, function each(obj, fn){
+  Map.meth($L, function each(obj, fn){
     var i;
     if (obj instanceof Array){
       var l = obj.length;
@@ -428,7 +428,7 @@ Lapiz.Module("Collections", function($L){
   // results can be unpredictable. This primarily provided as a tool for
   // interfacing with other libraries and frameworks. Use the accessor interface
   // whenever possible.
-  Map.method($L, function ArrayConverter(accessor){
+  Map.meth($L, function ArrayConverter(accessor){
     var arr = [];
     var index = [];
     accessor.each(function(i, obj){
@@ -459,12 +459,19 @@ Lapiz.Module("Collections", function($L){
 Lapiz.Module("Dependency", function($L){
   var _dependencies = {};
 
+  // > Lapiz.Dependency(name)
+  // Returns the dependency associated with name
   $L.Dependency = function(name){
     var d = _dependencies[name];
     if (d === undefined) { throw "Cannot find Dependency " + name; }
     return d();
   };
 
+  // > Lapiz.Dependency.Service(name, constructor)
+  // Service will register the constructor in manor so that calling
+  // > Lapiz.Dependency(name)(args...)
+  // on a service is the same as calling
+  // > new constructor(args...)
   $L.Dependency.Service = function(name, fn){
     function F(args) {
       return fn.apply(this, args);
@@ -476,20 +483,32 @@ Lapiz.Module("Dependency", function($L){
     };
   };
 
+  // > Lapiz.Dependency.Factory(name, fn)
+  // Factory is the most direct of the dependency registrations, it registers
+  // the function directly
   $L.Dependency.Factory = function(name, fn){
     _dependencies[name] = fn;
   };
 
+  // > Lapiz.Dependency.Reference(name, resource)
+  // Wraps the resource in a closure function so that calling
+  // > Lapiz.Dependency(name)
+  // will return the resource.
   $L.Dependency.Reference = function(name, res){
     _dependencies[name] = function(){
       return res;
     };
   };
 
+  // > Lapiz.Dependency.remove(name)
+  // Removes a dependency
   $L.Dependency.remove = function(name){
     delete _dependencies[name];
   };
 
+  // > Lapiz.Dependency.has(name)
+  // Returns a boolean indicating if there is a resource registered corresonding
+  // to name.
   $L.Dependency.has = function(name){
     return _dependencies.hasOwnProperty(name);
   };
@@ -726,7 +745,8 @@ Lapiz.Module("Events", ["Collections"], function($L){
 
     // > event.register(fn)
     // > event.register = fn
-    // The event.register method takes a function. All registered functions will be called when the event fires.
+    // The event.register method takes a function. All registered functions will
+    // be called when the event fires.
     $L.Map.setterMethod(event, function register(fn){
       _listeners.push(fn);
       return fn;
@@ -745,7 +765,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     // The event.fire method will call all functions that have been registered
     // with the event. The arguments that are passed into fire will be passed
     // into the registered functions.
-    $L.Map.method(event, function fire(){
+    $L.Map.meth(event, function fire(){
       if (!event.fire.enabled) { return event; }
       var i;
       var l = _listeners.length;
@@ -784,7 +804,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     var facade = $L.Map();
 
     // > singleEvent.register
-    $L.Map.method(facade, function register(fn){
+    $L.Map.meth(facade, function register(fn){
       if (_hasFired){
         fn.apply(this, _args);
       } else {
@@ -793,13 +813,13 @@ Lapiz.Module("Events", ["Collections"], function($L){
     });
 
     // > singleEvent.register.deregister
-    $L.Map.method(facade.register, function deregister(fn){
+    $L.Map.meth(facade.register, function deregister(fn){
       if (_hasFired) { return; }
       _event.register.deregister(fn);
     });
 
     // > singleEvent.fire
-    $L.Map.method(facade, function fire(){
+    $L.Map.meth(facade, function fire(){
       if (_hasFired) { return; }
       _hasFired = true;
       _args = arguments;
@@ -982,7 +1002,23 @@ Lapiz.Module("Filter", function($L){
   });
 });
 Lapiz.Module("Index", function($L){
-  $L.Index = function(cls, primaryFunc, domain){
+  // > Lapiz.Index(lapizClass)
+  // > Lapiz.Index(lapizClass, primaryFunc)
+  // > Lapiz.Index(lapizClass, primaryField)
+  // > Lapiz.Index(lapizClass, primary, domain)
+  // Adds an index to a class. If class.on.change and class.on.delete exist,
+  // the index will use these to keep itself up to date.
+  //
+  // Index needs a primary key. Any to entries with the same primary key are
+  // considered equivalent and one will overwrite the other. By default, Index
+  // assumes a primary property of "id". To use another field, pass in a string
+  // as primaryField. To generate a primary key from the data in the object,
+  // pass in a function as primaryFunc.
+  //
+  // By default, the Index methods will be attached directly to the class. If
+  // this would cause a namespace collision, a string can be provided as a
+  // domain and all methods will be attached in that namespace.
+  $L.set($L, "Index", function(cls, primaryFunc, domain){
     if (primaryFunc === undefined){
       primaryFunc = function(obj){return obj.id;};
     } else if (typeof primaryFunc === "string"){
@@ -994,7 +1030,7 @@ Lapiz.Module("Index", function($L){
     } else if ( !(primaryFunc instanceof  Function) ){
       throw("Expected a function or string");
     }
-    
+
     if (domain === undefined) {
       domain = cls;
     } else {
@@ -1004,15 +1040,29 @@ Lapiz.Module("Index", function($L){
 
     var _primary = $L.Dictionary();
 
+    // > indexedClass.each( function(key, val))
     domain.each = _primary.each;
+
+    // > indexedClass.has(key)
     domain.has = _primary.has;
+
+    // > indexedClass.Filter(filterFunc)
+    // > indexedClass.Filter(filterField, val)
     domain.Filter = _primary.Filter;
+
+    // > indexedClass.Sort(sortFunc)
+    // > indexedClass.Sort(sortField)
     domain.Sort = _primary.Sort;
+
+    // > indexedClass.remove(key)
     domain.remove = _primary.remove;
 
+    // > indexedClass.keys
     Object.defineProperty(domain, "keys",{
       get: function(){ return _primary.keys; }
     });
+
+    // > indexedClass.all
     Object.defineProperty(domain, "all",{
       get: function(){ return _primary.Accessor; }
     });
@@ -1030,6 +1080,8 @@ Lapiz.Module("Index", function($L){
       _upsert(obj);
     });
 
+    // > indexedClass.get(primaryKey)
+    // > indexedClass.get(field, val)
     domain.get = function(idFuncOrAttr, val){
       var matches = {};
       if (val !== undefined){
@@ -1045,11 +1097,11 @@ Lapiz.Module("Index", function($L){
       }
       return _primary(idFuncOrAttr);
     };
-  };
+  });
 });
 Lapiz.Module("Objects", ["Events"], function($L){
   function _getter(self, funcOrProp){
-    if ($L.typeCheck.function(funcOrProp)) { return funcOrProp; }
+    if ($L.typeCheck.func(funcOrProp)) { return funcOrProp; }
     if ($L.typeCheck.string(funcOrProp)) { return function(){ return self.attr[funcOrProp]; }; }
   }
 
@@ -1075,11 +1127,11 @@ Lapiz.Module("Objects", ["Events"], function($L){
     };
   }
 
-  // > Lapiz.Object();
-  // > Lapiz.Object(constructor);
+  // > lapizObject = Lapiz.Object();
+  // > lapizObject = Lapiz.Object(constructor);
   // Creates a Lapiz Object, a structure per-wired for adding events, properties
-  // and methods. If a constructor is supplied, it will be invoked with 'this' set
-  // to the object.
+  // and methods. If a constructor is supplied, it will be invoked with 'this'
+  // set to the object.
   /* >
   var obj = Lapiz.Object();
   obj.properties({
@@ -1087,7 +1139,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
   });
   obj = obj.pub;
   obj.name = "test";
-  
+
   var obj2 = Lapiz.Object(function(){
     this.properties({
       "name": "string"
@@ -1099,19 +1151,19 @@ Lapiz.Module("Objects", ["Events"], function($L){
     var self = $L.Map();
     var pub = $L.Map();
 
-    // > object.pub
+    // > lapizObject.pub
     // The public namespace on the object
     self.pub = pub;
 
-    // > object.pub.on
+    // > lapizObject.pub.on
     // Namespace for event registrations
     self.pub.on = $L.Map();
 
-    // > object.fire
+    // > lapizObject.fire
     // Namespace for event fire methods
     self.fire = $L.Map();
 
-    // > object.attr
+    // > lapizObject.attr
     // Namespace for attribute values
     /* >
     var obj = Lapiz.Object(function(){
@@ -1127,7 +1179,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
     self.attr = $L.Map();
     self._cls = $L.Object;
 
-    // > object.event(name)
+    // > lapizObject.event(name)
     // Creates an event and places the registration method in object.pub.on and
     // the fire method in object.fire
     /* >
@@ -1142,17 +1194,17 @@ Lapiz.Module("Objects", ["Events"], function($L){
       self.fire[name] = e.fire;
     };
 
-    // > object.pub.on.change
-    // > object.fire.change
+    // > lapizObject.pub.on.change
+    // > lapizObject.fire.change
     // The change event will fire when ever a property is set.
     self.event("change");
 
-    // > object.pub.on.delete
-    // > object.fire.delete
+    // > lapizObject.pub.on.delete
+    // > lapizObject.fire.delete
     // The delete event should be fired if the object is going to be deleted.
     self.event("delete");
 
-    // > object.setMany(collection)
+    // > lapizObject.setMany(collection)
     // Takes a key/value collection (generally a JavaScript object) and sets
     // any properties that match the keys.
     /* >
@@ -1176,7 +1228,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
         "name": "string",
         "role": "string"
       });
-      this.method(this.setMany);
+      this.meth(this.setMany);
     }).pub;
     obj.setMany({
       "id":12,
@@ -1199,16 +1251,16 @@ Lapiz.Module("Objects", ["Events"], function($L){
       self.fire.change(self.pub);
     };
 
-    // > object.properties(properties)
-    // > object.properties(properties, values)
-    // The properties method is used to attach getter/setter properties to the public
-    // namespace. The attribute that underlies the getter/setter will be attached to
-    // object.attr.
+    // > lapizObject.properties(properties)
+    // > lapizObject.properties(properties, values)
+    // The properties method is used to attach getter/setter properties to the
+    // public namespace. The attribute that underlies the getter/setter will be
+    // attached to object.attr.
     //
-    // If a setter is defined and no getter is defined, a getter will be generated
-    // that returns the attribute value. If a function is given, that will be used as
-    // the setter, if a string is provided, that will be used to get a setter from
-    // Lapiz.parse.
+    // If a setter is defined and no getter is defined, a getter will be
+    // generated that returns the attribute value. If a function is given, that
+    // will be used as the setter, if a string is provided, that will be used to
+    // get a setter from Lapiz.parse.
     /* >
     var obj = Lapiz.Object(function(){
       var self = this;
@@ -1241,7 +1293,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
 
         if (val === undefined || val === null){
           throw new Error("Invalid value for '" + property + "'");
-        } else if ($L.typeCheck.function(val)|| $L.typeCheck.string(val)){
+        } else if ($L.typeCheck.func(val)|| $L.typeCheck.string(val)){
           desc.set = _setter(self, property, val);
           desc.get = _getter(self, property);
         } else if (val.set !== undefined || val.get !== undefined) {
@@ -1260,19 +1312,19 @@ Lapiz.Module("Objects", ["Events"], function($L){
       }
     };
 
-    // > object.getter(getterFn)
+    // > lapizObject.getter(getterFn)
     // Creates a getter property in the public namespace.
     self.getter = function(getterFn){
       $L.Map.getter(self.pub, getterFn);
     };
 
-    // > object.method(fn)
+    // > lapizObject.meth(fn)
     // Creates a method in the public namespace.
-    self.method = function(fn){
-      $L.Map.method(self.pub, fn);
+    self.meth = function(fn){
+      $L.Map.meth(self.pub, fn);
     };
 
-    if ($L.typeCheck.function(constructor)){
+    if ($L.typeCheck.func(constructor)){
       constructor.apply(self);
     }
 
@@ -1291,7 +1343,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
   }
   foo('do','re','mi'); // logs {'x':'do', 'y':'re', 'z':'mi'}
   */
-  $L.Map.method($L, function argDict(){
+  $L.Map.meth($L, function argDict(){
     var args = arguments.callee.caller.arguments;
     var argNames = (arguments.callee.caller + "").match(/\([^)]*\)/g);
     var dict = {};
@@ -1310,8 +1362,8 @@ Lapiz.Module("Objects", ["Events"], function($L){
   // Event registration, event will fire whenever a new Lapiz class is defined.
   $L.Event.linkProperty($L.on, "class", _newClassEvent);
 
-  // > Lapiz.Class(constructor)
-  // > Lapiz.Class(constructor, useCustom)
+  // > lapizClass = Lapiz.Class(constructor)
+  // > lapizClass = Lapiz.Class(constructor, useCustom)
   // Used to define a class. Lapiz.on.class will fire everytime a new class
   // is created. The returned constructor will also have an on.create method
   // that will fire everytime a new instance is created.
@@ -1358,7 +1410,12 @@ Lapiz.Module("Objects", ["Events"], function($L){
       };
     }
 
+    // > lapizClass.on
+    // Namespace for class level events
     ret.on = $L.Map();
+
+    // > lapizClass.on.create
+    // Registration for event that will fire everytime a new instance is created
     $L.Event.linkProperty(ret.on, "create", newInstanceEvent);
 
     _newClassEvent.fire(ret);
@@ -1384,7 +1441,8 @@ Lapiz.Module("Parser", function($L){
   // If rad is not defined it will default to 10. This is mostly a wrapper
   // around parseInt, however if val is a boolean it will reurn eitehr 1
   // or 0.
-  $L.Map.method($L.parse, function int(val,rad){
+  $L.set($L.parse, "int", function(val,rad){
+    //can't use $L.Map.meth because "int" is reserve word
     if (val === true){
       return 1;
     } else if (val === false){
@@ -1397,11 +1455,11 @@ Lapiz.Module("Parser", function($L){
   // > Lapiz.parse.string
   // If val is null or undefined, returns an empty stirng. If val
   // is a string, it is returned, if it's a number it's converted
-  // to a string. If val is an object that has a .str() method, 
+  // to a string. If val is an object that has a .str() method,
   // that will be used, if it doesn't have .str but it does have
   // .toString, that will be used. As a last resort it will be
   // concatted with an empty string.
-  $L.Map.method($L.parse, function string(val){
+  $L.Map.meth($L.parse, function string(val){
     if (val === undefined || val === null) { return ""; }
     var type = typeof(val);
     if (type === "string") { return val; }
@@ -1417,29 +1475,29 @@ Lapiz.Module("Parser", function($L){
     }
     return "" + val;
   });
-  
+
   // > Lapiz.parse.bool(val)
   // Converts val to a bool
-  $L.Map.method($L.parse, function bool(val){ return !!val; });
-  
+  $L.Map.meth($L.parse, function bool(val){ return !!val; });
+
   // > Lapiz.parse.number(val)
   // Converts val to a number. This is a wrapper around parseFloat.
-  $L.Map.method($L.parse, function number(val){ return parseFloat(val); });
-  
+  $L.Map.meth($L.parse, function number(val){ return parseFloat(val); });
+
   // Lapiz.parse.object(val)
   // This is just a pass through function, not a true parser. It can
   // be useful for object properties.
-  $L.Map.method($L.parse, function object(obj){ return obj; });
-  
+  $L.Map.meth($L.parse, function object(obj){ return obj; });
+
   // > Lapiz.parse.array(parser)
-  // This takes a parser or a string (which will be resolved agains Lapiz.parse) 
+  // This takes a parser or a string (which will be resolved agains Lapiz.parse)
   // and returns an array parser.
   /* >
   var arrIntParser = Lapiz.parse.array("int");
   console.log(arrIntParser([3.14, "12.34", true]); // [3, 12, 1]
   console.log(arrIntParser("22.22"); // [22]
   */
-  $L.Map.method($L.parse, function array(parser){
+  $L.Map.meth($L.parse, function array(parser){
     parser = resolveParser(parser);
     return function(arr){
       if (Array.isArray(arr)){

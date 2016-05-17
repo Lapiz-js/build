@@ -18,7 +18,7 @@ Lapiz.Module("Template", ["Collections"], function($L){
   */
   var _tokenRe = /\$(\w+(?:\.\w+)*|\$)/;
   var _singleTokenRe = /^\$(\w+(?:\.\w+)*|\$)$/;
-  std.method(function tokenizer(template, ctx, resolver){
+  std.meth(function tokenizer(template, ctx, resolver){
     var token, val, structure, i, l;
     var singleToken = _singleTokenRe.exec(template);
     var out = template;
@@ -39,7 +39,7 @@ Lapiz.Module("Template", ["Collections"], function($L){
   Special Cases:
   $ returns ctx
   */
-  std.method(function resolver(token, ctx){
+  std.meth(function resolver(token, ctx){
     if (token === "$") { return ctx; }
     var val, l, i;
     token = token.split(".");
@@ -52,7 +52,7 @@ Lapiz.Module("Template", ["Collections"], function($L){
     return val;
   });
 
-  self.method(function Templator(tokenizer, resolver){
+  self.meth(function Templator(tokenizer, resolver){
     return function(template, ctx){
       return tokenizer(template, ctx, resolver);
     };
