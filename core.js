@@ -1,16 +1,17 @@
-/**
- * @namespace Lapiz
- */
 var Lapiz = (function($L) {
   return $L || Object.create(null);
 }(Lapiz));
 
-/**
- * @namespace ModuleLoaderModule
- * @memberof Lapiz
- *
- * Loads modules into Lapiz, allowing them to declare dependencies
- */
+// > Lapiz.Module(moduleName, moduleFunction(Lapiz))
+// > Lapiz.Module(moduleName, [dependencies...], moduleFunction(Lapiz))
+// The module loader is useful when building Lapiz modules. It will invoke the
+// moduleFunction and pass in Lapiz when all dependencies have been loaded. The
+// moduleName is only used for dependency management.
+/* >
+Lapiz.Module("Foo", ["Events"], function($L){
+  $L.set($L, "foo", "bar");
+});
+*/
 var Lapiz = (function ModuleLoaderModule($L){
   var _loaded = Object.create(null);
   var _pending = [];
@@ -26,6 +27,19 @@ var Lapiz = (function ModuleLoaderModule($L){
     return notLoaded;
   };
 
+  // > Lapiz.set(obj, name, value)
+  // Defines a fixed propery on an object. Properties defined this way cannot be
+  // overridden.
+  /* >
+  var x = {};
+  x.foo = function(){...};
+  //somewhere else
+  x.foo = 12; //the method is now gone
+
+  var y = {};
+  Lapiz.set(y, "foo", function{...});
+  y.foo = 12; // this will not override the method
+  */
   function set(obj, name, value){
     Object.defineProperty(obj, name, { value: value });
   }
@@ -76,11 +90,25 @@ var Lapiz = (function ModuleLoaderModule($L){
     }
   });
 
+  // > Lapiz.Module.Loaded()
+  // Returns all the modules that have been loaded
   $L.Module.Loaded = function(){
     return Object.keys(_loaded);
   };
   Object.freeze(self.Module);
 
+  // > Lapiz.typeCheck(obj, type)
+  // > Lapiz.typeCheck(obj, type, err)
+  // Checks if the type of obj matches type. If type is a string, typeof will be
+  // used, if type is a class, instanceof will be used. To throw an error when
+  // the types do not match, specify err as a string. Other wise, typeCheck will
+  // return a boolean indicating if the types matched.
+  /* >
+  Lapiz.typeCheck([], Array); // true
+  Lapiz.typeCheck("test", "string"); // true
+  Lapiz.typeCheck("test", Array); // false
+  Lapiz.typeCheck([], "string", "Expected string"); // throws an error
+  */
   $L.set($L, "typeCheck", function(obj, type, err){
     var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
     if (err !== undefined && !typeCheck){
@@ -88,11 +116,33 @@ var Lapiz = (function ModuleLoaderModule($L){
     }
     return typeCheck;
   });
+
+  // > Lapiz.typeCheck.function(obj)
+  // > Lapiz.typeCheck.function(obj, err)
+  // Checks if the object is a function. If a string is supplied for err, it
+  // will throw err if obj is not a function.
   $L.set($L.typeCheck, "function", function(obj, err){return $L.typeCheck(obj, Function, err)});
+
+  // > Lapiz.typeCheck.array(obj)
+  // > Lapiz.typeCheck.array(obj, err)
+  // Checks if the object is a array. If a string is supplied for err, it
+  // will throw err if obj is not an array.
   $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err)});
+
+  // > Lapiz.typeCheck.string(obj)
+  // > Lapiz.typeCheck.string(obj, err)
+  // Checks if the object is a string. If a string is supplied for err, it
+  // will throw err if obj is not an string.
   $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err)});
+
+  // > Lapiz.typeCheck.number(obj)
+  // > Lapiz.typeCheck.number(obj, err)
+  // Checks if the object is a number. If a string is supplied for err, it
+  // will throw err if obj is not an number.
   $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err)});
 
+  // > Lapiz.assert(bool, err)
+  // If bool evaluates to false, an error is thrown with err.
   $L.set($L, "assert", function(bool, err){
     if (!bool){
       throw new Error(err);
@@ -102,17 +152,42 @@ var Lapiz = (function ModuleLoaderModule($L){
   return $L;
 })(Lapiz);
 Lapiz.Module("Collections", function($L){
+  // > Lapiz.Map()
+  // Returns a key value store that inherits no properties or methods. Useful to
+  // bypass calling "hasOwnProperty". This is just a wrapper around
+  // Object.create(null);
+  //
+  // Lapiz.Map also serves as a namespace for the following helper methods.
+  // They can be called on any object. They all use Object.defineProperty to
+  // create a proptery that cannot be overridden.
   function Map(){
     return Object.create(null);
   };
   $L.set($L, "Map", Map);
 
+  // > Lapiz.Map.method(obj, namedFunc)
+  // Attaches a method to an object. The method must be a named function.
+  /* >
+  var x = Lapiz.Map();
+  Lapiz.Map.method(x, function foo(){...});
+  x.foo(); //calls foo
+  */
   $L.set(Map, "method", function(obj, fn){
     $L.typeCheck.function(fn, "Expected function");
     $L.assert(fn.name !== "", "Require named function for method");
     $L.set(obj, fn.name, fn);
   });
 
+  // > Lapiz.Map.setterMethod(obj, namedSetterFunc)
+  // Attaches a setter method to an object. The method must be a named function.
+  /* >
+  var x = Lapiz.Map();
+  Lapiz.Map.method(x, function foo(val){...});
+
+  //these two calls are equivalent
+  x.foo("bar");
+  x.foo = "bar";
+  */
   Map.method(Map, function setterMethod(obj, fn){
     $L.typeCheck.function(fn, "Expected function for setterMethod");
     $L.assert(fn.name !== "", "Require named function for setterMethod");
@@ -122,16 +197,61 @@ Lapiz.Module("Collections", function($L){
     });
   });
 
+  // > Lapiz.Map.prop(obj, name, desc)
+  // Just a wrapper around Object.defineProperty
   Map.method(Map, function prop(obj, name, desc){
     Object.defineProperty(obj, name, desc);
   });
 
+  // > Lapiz.Map.getter(object, namedGetterFunc)
+  // Attaches a getter method to an object. The method must be a named function.
+  /* >
+  var x = Lapiz.Map();
+  var ctr = 0;
+  Lapiz.Map.getter(x, function foo(){
+    var c = ctr;
+    ctr +=1;
+    return c;
+  });
+  console.log(x.foo); //0
+  console.log(x.foo); //1
+  */
   Map.method(Map, function getter(obj, fn){
     $L.typeCheck.function(fn, "Expected function for getter");
     $L.assert(fn.name !== "", "Require named function for getter");
     Object.defineProperty(obj, fn.name, {"get": fn,} );
   });
 
+  // > Lapiz.Map.setterGetter(obj, name, setterFunc, getterFunc)
+  // > Lapiz.Map.setterGetter(obj, name, setterFunc)
+  // Creates a setter/getter property via a closure. A setter function is
+  // required, if no getter is provided, the value will be returned. This is the
+  // reason the method is named setterGetter rather than the more traditional
+  // arrangement of "getterSetter" because the arguments are arranged so that
+  // the first 3 are required and the last is optional.
+  /* >
+  var x = Lapiz.Map();
+  Lapiz.Map.setterGetter(x, "foo", function(i){return parseInt(i);});
+
+  x.foo = "12";
+  console.log(x.foo); // will log 12 as an int
+  */
+  // The value 'this' is always set to a special setterInterface for the setter
+  // method. This can be used to cancel the set operation;
+  /* >
+  var x = Lapiz.Map();
+  Lapiz.Map.setterGetter(x, "foo", function(i){
+    i = parseInt(i);
+    this.set = !isNaN(i);
+    return i;
+  });
+
+  x.foo = "12";
+  console.log(x.foo); // will log 12 as an int
+  x.foo = "hello";
+  console.log(x.foo); // value will still be 12
+
+  */
   Map.method(Map, function setterGetter(obj, name, setter, getter){
     $L.typeCheck.function(setter, "Expected function for setterGetter");
     var val;
@@ -158,6 +278,20 @@ Lapiz.Module("Collections", function($L){
     Object.defineProperty(obj, name, desc);
   });
 
+  // > Lapiz.Map.copyProps(copyTo, copyFrom, props...)
+  // Copies the properties from the copyFrom object to the copyTo obj. The
+  // properties should be strings. By default, the property will be copied with
+  // basic assignment. If the property is preceeded by &, it will be copied by
+  // reference.
+  /* >
+  var A = {"x": 12, "y": "foo", z:[]};
+  var B = {};
+  Lapiz.Map.copyProps(B, A, "x", "&y");
+  A.x = 314;
+  console.log(B.x); // 12
+  B.y = "Test";
+  console.log(A.y); // Test
+  */
   Map.method(Map, function copyProps(copyTo, copyFrom){
     //todo: write tests for this
     var i = 2;
@@ -181,6 +315,43 @@ Lapiz.Module("Collections", function($L){
     }
   });
 
+  // > Lapiz.Namespace()
+  // > Lapiz.Namespace(constructor)
+  // Namespace is a closure around all of the Map methods (plus Lapiz.set). It
+  // provides syntactic sugar so that the obj argument doesn't need to be
+  // supplied each time.
+  //
+  // The constructor is optional. If not given the outer layer of the namespace
+  // is returned.
+  /* >
+  var x = Lapiz.Namespace();
+  x.set("foo", "bar");
+  x.method(function sayHello(name){
+    console.log("Hello, "+name);
+  });
+  console.log(x.namespace.foo); // bar
+  x.namespace.sayHello("World"); // Hello, World
+  */
+  // If a constructor is provided, it will be invoked with "this" as the outer
+  // layer of the namespace and will return in the inner namespace.
+  /* >
+  var x = Lapiz.Namespace(function(){
+    this.set("foo", "bar");
+    this.method(function sayHello(name){
+      console.log("Hello, "+name);
+    });
+  });
+
+  console.log(x.foo); // bar
+  x.sayHello("World"); // Hello, World
+  */
+  // * namespace.set(name, value)
+  // * namespace.prop(name, desc)
+  // * namespace.method(namedFunc)
+  // * namespace.setterMethod(namedSetterFunc)
+  // * namespace.getter(namedGetterFunc)
+  // * namespace.setterGetter(name, setter, getter)
+  // * namespace.setterGetter(name, setter)
   Map.method($L, function Namespace(fn){
     var self = $L.Map();
     self.namespace = $L.Map();
@@ -199,11 +370,42 @@ Lapiz.Module("Collections", function($L){
     return self;
   });
 
+  // > Lapiz.remove(arr, el, start)
+  // > Lapiz.remove(arr, el)
+  // Removes the one instance of the given element from the array. If start is
+  // not specified, it will be the first instance, otherwise it will be the
+  // first instance at or after start.
+  /* >
+  var arr = [3,1,4,1,5,9];
+  Lapiz.remove(arr,1);
+  console.log(arr); //[3,4,1,5,9]
+  */
   Map.method($L, function remove(arr, el, start){
     var i = arr.indexOf(el, start);
     if (i > -1) { arr.splice(i, 1); }
   });
 
+  // > Lapiz.each(collection, fn(key, val))
+  // Iterates over the collection, calling func(key, val) for each item in the
+  // collection. If the collection is an array, key will be the index. If func
+  // returns true (or an equivalent value) the Lapiz.each will return the
+  // current key allowing each to act as a search.
+  /* >
+  var arr = [3,1,4,1,5,9];
+  Lapiz.each(arr, function(key,val){
+    console.log(key, val);
+  });
+  var gt4 = Lapiz.each(arr, function(key,val){return val > 4;});
+
+  var kv = {
+    "A":"apple",
+    "B":"banana",
+    "C":"cantaloupe"
+  };
+  Lapiz.each(kv, function(key,val){
+    console.log(key, val);
+  });
+  */
   Map.method($L, function each(obj, fn){
     var i;
     if (obj instanceof Array){
@@ -220,6 +422,12 @@ Lapiz.Module("Collections", function($L){
     }
   });
 
+  // > Lapiz.ArrayConverter(accessor)
+  // Takes an accessor and provides an array. The events on the accessor will be
+  // used to keep the array up to date. However, if the array is modified, the
+  // results can be unpredictable. This primarily provided as a tool for
+  // interfacing with other libraries and frameworks. Use the accessor interface
+  // whenever possible.
   Map.method($L, function ArrayConverter(accessor){
     var arr = [];
     var index = [];
@@ -287,6 +495,27 @@ Lapiz.Module("Dependency", function($L){
   };
 });
 Lapiz.Module("Dictionary", function($L){
+
+  // > Lapiz.Dictioanry()
+  // > Lapiz.Dictioanry(seed)
+  // Dictionaries allow for the storage of key/value pairs in a container that
+  // will emit events as the contents change.
+  //
+  // If seed values are specified, they will start as the contents of the
+  // dictionary, otherwise the dictionary will start off empty.
+  /* >
+  var emptyDict = Lapiz.Dictionary();
+  var fruitDict = Lapiz.Dictionary({
+    "A": "apple",
+    "B": "banana",
+    "C": "cantaloupe"
+  });
+  console.log(fruitDict("A")); // apple
+  fruitDict("A", "apricot");
+  console.log(fruitDict("A")); // apricot
+  emptyDict(12, "zebra");
+  console.log(emptyDict(12)); // apricot
+  */
   $L.set($L, "Dictionary", function(val){
     var _dict = $L.Map();
     var _length = 0;
@@ -308,6 +537,11 @@ Lapiz.Module("Dictionary", function($L){
       }
     }
 
+    // > dict(key)
+    // > dict(key, val)
+    // If only key is given, the value currently associated with that key will
+    // be returned. If key and val are both given, val is associated with key
+    // and the proper event (change or insert) will fire.
     var self = function(key, val){
       if (val === undefined){
         return _dict[key];
@@ -328,10 +562,33 @@ Lapiz.Module("Dictionary", function($L){
 
     self._cls = $L.Dictionary;
 
+    // > dict.length
+    // A read-only property that returns the length of a dictionary
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.length); // 3
+    */
     $L.Map.getter(self, function length(){
       return _length;
     });
 
+    // > dict.remove(key)
+    // The remove method will remove a key from the dictionary and the remove
+    // event will fire.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    fruitDict.remove("B");
+    console.log(fruitDict.length); // 2
+    console.log(fruitDict("B")); // undefined
+    */
     self.remove = function(key){
       if (_dict[key] !== undefined){
         _length -= 1;
@@ -341,14 +598,51 @@ Lapiz.Module("Dictionary", function($L){
       }
     };
 
+    // > dict.on
+    // Namespace for dictionary events
     self.on = $L.Map();
+
+    // > dict.on.insert(fn(key, accessor))
+    // Event will fire when a new key is added to the dictionary
     $L.Event.linkProperty(self.on, "insert", _insertEvent);
+    // > dict.on.change(fn(key, accessor))
+    // Event will fire when a new key has a new value associated with it
     $L.Event.linkProperty(self.on, "change", _changeEvent);
+    // > dict.on.remove(fn(key, val, accessor))
+    // Event will fire when a key is removed.
     $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
+    // > dict.has(key)
+    // The has method returns a boolean stating if the dictionary has the given
+    // key.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.has("B")); // true
+    console.log(fruitDict.has(12)); // false
+    */
     self.has = function(key){ return _dict[key] !== undefined; };
 
+    // > dict.each(fn(key, val))
+    // The each method takes a function and calls it for each key/value in the
+    // collection. The function will be called with two arguments, the key and
+    // the corresponding value. If any invocation of the function returns True,
+    // that will signal the each loop to break. The order is not guarenteed.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    fruitDict(function(key, val){
+      console.log(key, val);
+      return key === "A";
+    });
+    */
     self.each = function(fn){
       var keys = Object.keys(_dict);
       var key, i;
@@ -358,13 +652,42 @@ Lapiz.Module("Dictionary", function($L){
       }
     };
 
+    // > dict.keys
+    // A read-only property that will return the keys as an array.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.keys); // ["C", "A", "B"] in some order
+    */
     $L.Map.getter(self, function keys(){
       return Object.keys(_dict);
     });
 
+    // > dict.Sort(sorterFunction)
+    // > dict.Sort(attribute)
+    // Returns a Sorter with the dictionary as the accessor
     self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
+
+    // > dict.Filter(filterFunction)
+    // > dict.Filter(attribute, val)
+    // Returns a Filter with the dictionary as the accessor
     self.Filter = function(filterOrAttr, val){ return $L.Filter(self, filterOrAttr, val); };
 
+    // > dict.Accessor
+    // > dict.Accessor(key)
+    // The accessor is a read-only iterface to the dictionary
+    // * accessor.length
+    // * accessor.keys
+    // * accessor.has(key)
+    // * accessor.each(fn(key, val))
+    // * accessor.on.insert
+    // * accessor.on.change
+    // * accessor.on.remove
+    // * accessor.Sort
+    // * accessor.Filter
     self.Accessor = function(key){
       return _dict[key];
     };
@@ -382,20 +705,46 @@ Lapiz.Module("Dictionary", function($L){
   });
 });
 Lapiz.Module("Events", ["Collections"], function($L){
+
+  // > Lapiz.Event()
+  /* >
+  var event = Lapiz.Event();
+  e.register(function(val){
+    console.log(val);
+  });
+  var fn2 = function(val){
+    alert(val);
+  };
+  e.register = fn2;
+  e.fire("Test 1"); //will log "Test 1" to the console and pop up an alert
+  e.register.deregister(fn2);
+  e.fire("Test 2"); //will log "Test 2" to the console
+  */
   $L.set($L, "Event", function(){
     var _listeners = [];
     var event = Lapiz.Map();
 
+    // > event.register(fn)
+    // > event.register = fn
+    // The event.register method takes a function. All registered functions will be called when the event fires.
     $L.Map.setterMethod(event, function register(fn){
       _listeners.push(fn);
       return fn;
     });
 
+    // > event.register.deregister(fn)
+    // > event.register.deregister = fn
+    // The event.register.deregister method takes a function. If that function
+    // has been registered with the event, it will be removed.
     $L.Map.setterMethod(event.register, function deregister(fn){
       $L.remove(_listeners, fn);
       return fn;
     });
 
+    // > event.fire(args...)
+    // The event.fire method will call all functions that have been registered
+    // with the event. The arguments that are passed into fire will be passed
+    // into the registered functions.
     $L.Map.method(event, function fire(){
       if (!event.fire.enabled) { return event; }
       var i;
@@ -405,9 +754,18 @@ Lapiz.Module("Events", ["Collections"], function($L){
       }
       return event;
     });
+
+    // > event.fire.enabled
+    // > event.fire.enabled = x
+    // The event.enabled is a boolean that can be set to enable or disable the
+    // fire method. If event.fire.enable is false, even if event.fire is called,
+    // it will not call the registered functions.
     $L.Map.setterGetter(event.fire, "enabled", function(enable){ return !!enable; });
     event.fire.enabled = true;
 
+    // > event.fire.length
+    // The event.length is a read-only property that returns the number of
+    // functions registered with the event.
     $L.Map.getter(event.fire, function length(){ return _listeners.length; });
 
     $L.set(event, "_cls", $L.Event);
@@ -415,11 +773,17 @@ Lapiz.Module("Events", ["Collections"], function($L){
     return event;
   });
 
+  // > Lapiz.SingleEvent()
+  // A single event is an instance that will only fire once. Registering a
+  // function after the event has fired will result in the function being
+  // immedatly invoked with the arguments that were used when the event fired.
   $L.set($L, "SingleEvent", function(){
     var _event = $L.Event();
     var _hasFired = false;
     var _args;
     var facade = $L.Map();
+
+    // > singleEvent.register
     $L.Map.method(facade, function register(fn){
       if (_hasFired){
         fn.apply(this, _args);
@@ -427,10 +791,14 @@ Lapiz.Module("Events", ["Collections"], function($L){
         _event.register(fn);
       }
     });
+
+    // > singleEvent.register.deregister
     $L.Map.method(facade.register, function deregister(fn){
       if (_hasFired) { return; }
       _event.register.deregister(fn);
     });
+
+    // > singleEvent.fire
     $L.Map.method(facade, function fire(){
       if (_hasFired) { return; }
       _hasFired = true;
@@ -440,6 +808,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     });
     $L.set(facade, "_cls", $L.SingleEvent);
 
+    // > singleEvent.fire.enabled
     Object.defineProperty(facade.fire, "enabled", {
       get: function(){ return _event.fire.enabled; },
       set: function(val) { _event.fire.enabled = val; }
@@ -448,6 +817,20 @@ Lapiz.Module("Events", ["Collections"], function($L){
     return facade;
   });
 
+  // > Lapiz.Event.linkProperty(obj, name, evt)
+  // This is a helper function for linking an event to an object. It will be
+  // linked like a setter method:
+  /* >
+  var e = Lapiz.Event();
+  var map = Lapiz.Map();
+  Lapiz.Event.linkProperty(map, "foo", e);
+  // These two are the same
+  map.foo(function(){...});
+  map.foo = function(){...};
+
+  // To deregister
+  map.foo.deregister(fn);
+  */
   $L.set($L.Event, "linkProperty", function(obj, name, evt){
     Object.defineProperty(obj, name, {
       get: function(){ return evt.register; },
@@ -458,6 +841,9 @@ Lapiz.Module("Events", ["Collections"], function($L){
   $L.on = $L.Map();
 });
 Lapiz.Module("Filter", function($L){
+
+  // > Lapiz.Filter(accessor, filterFunc)
+  // > Lapiz.Filter(accessor, attribute, val)
   $L.set($L, "Filter", function(accessor, filterOrAttr, val){
     var _index = [];
     var self = function(key){
@@ -689,26 +1075,115 @@ Lapiz.Module("Objects", ["Events"], function($L){
     };
   }
 
+  // > Lapiz.Object();
+  // > Lapiz.Object(constructor);
+  // Creates a Lapiz Object, a structure per-wired for adding events, properties
+  // and methods. If a constructor is supplied, it will be invoked with 'this' set
+  // to the object.
+  /* >
+  var obj = Lapiz.Object();
+  obj.properties({
+    "name": "string"
+  });
+  obj = obj.pub;
+  obj.name = "test";
+  
+  var obj2 = Lapiz.Object(function(){
+    this.properties({
+      "name": "string"
+    });
+  }).pub;
+  obj2.name = "test 2";
+  */
   $L.Object = function(constructor){
     var self = $L.Map();
     var pub = $L.Map();
 
+    // > object.pub
+    // The public namespace on the object
     self.pub = pub;
+
+    // > object.pub.on
+    // Namespace for event registrations
     self.pub.on = $L.Map();
+
+    // > object.fire
+    // Namespace for event fire methods
     self.fire = $L.Map();
+
+    // > object.attr
+    // Namespace for attribute values
+    /* >
+    var obj = Lapiz.Object(function(){
+      this.properties({
+        "name": "string"
+      });
+    });
+    obj.pub.name = "test";
+    console.log(obj.attr.name); // test
+    obj.attr.name = "bar";
+    console.log(obj.pub.name); // test
+    */
     self.attr = $L.Map();
     self._cls = $L.Object;
 
+    // > object.event(name)
+    // Creates an event and places the registration method in object.pub.on and
+    // the fire method in object.fire
+    /* >
+    var obj = Lapiz.Object();
+    obj.event("foo");
+    obj.pub.on.foo = function(val){ console.log(val);};
+    obj.fire.foo("bar"); // this will fire foo logging "bar" to the console
+    */
     self.event = function(name){
       var e = $L.Event();
       $L.Event.linkProperty(self.pub.on, name, e);
       self.fire[name] = e.fire;
     };
 
+    // > object.pub.on.change
+    // > object.fire.change
+    // The change event will fire when ever a property is set.
     self.event("change");
+
+    // > object.pub.on.delete
+    // > object.fire.delete
+    // The delete event should be fired if the object is going to be deleted.
     self.event("delete");
 
-    self.setMany = function(json){
+    // > object.setMany(collection)
+    // Takes a key/value collection (generally a JavaScript object) and sets
+    // any properties that match the keys.
+    /* >
+    var obj = Lapiz.Object(function(){
+      this.properties({
+        "id": "int",
+        "name": "string",
+        "role": "string"
+      });
+    });
+    obj.setMany({
+      "id":12,
+      "role": "admin"
+    });
+    */
+    // Another technique is to attach setMany to the public interface
+    /* >
+    var obj = Lapiz.Object(function(){
+      this.properties({
+        "id": "int",
+        "name": "string",
+        "role": "string"
+      });
+      this.method(this.setMany);
+    }).pub;
+    obj.setMany({
+      "id":12,
+      "role": "admin"
+    });
+    */
+    self.setMany = function setMany(json){
       var property, i;
       var keys = Object.keys(json);
       var fireEnabled = self.fire.change.enabled;
@@ -724,6 +1199,38 @@ Lapiz.Module("Objects", ["Events"], function($L){
       self.fire.change(self.pub);
     };
 
+    // > object.properties(properties)
+    // > object.properties(properties, values)
+    // The properties method is used to attach getter/setter properties to the public
+    // namespace. The attribute that underlies the getter/setter will be attached to
+    // object.attr.
+    //
+    // If a setter is defined and no getter is defined, a getter will be generated
+    // that returns the attribute value. If a function is given, that will be used as
+    // the setter, if a string is provided, that will be used to get a setter from
+    // Lapiz.parse.
+    /* >
+    var obj = Lapiz.Object(function(){
+      var self = this;
+      this.properties({
+        "name": "string", // this will use Lapiz.parse.string
+        "foo": function(val){
+          // this will be the setter for foo
+          return parseInt("1"+val);
+        },
+        "bar": {
+          "set": "int",
+          "get": function(){
+            return "== "+self.attr.bar+" ==";
+          }
+        },
+        "glorp":{
+          "set": "bool",
+          "get": null, //makes this a set only property
+        }
+      });
+    });
+    */
     self.properties = function(properties, values){
       var property, val, i, desc;
       var keys = Object.keys(properties);
@@ -750,13 +1257,17 @@ Lapiz.Module("Objects", ["Events"], function($L){
       }
       if (values!== undefined){
         self.setMany(values);
-      };
+      }
     };
 
+    // > object.getter(getterFn)
+    // Creates a getter property in the public namespace.
     self.getter = function(getterFn){
       $L.Map.getter(self.pub, getterFn);
     };
 
+    // > object.method(fn)
+    // Creates a method in the public namespace.
     self.method = function(fn){
       $L.Map.method(self.pub, fn);
     };
@@ -768,6 +1279,18 @@ Lapiz.Module("Objects", ["Events"], function($L){
     return self;
   };
 
+  // > Lapiz.argDict()
+  // This is one of the few "magic methods" in Lapiz. When called from within a
+  // function, it returns the arguments names and values as a key/value object.
+  // The name is a little misleading, the result is a JavaScript object, not a
+  // Lapiz.Dictionary.
+  /* >
+  function foo(x,y,z){
+    var args = Lapiz.argDict();
+    console.log(args);
+  }
+  foo('do','re','mi'); // logs {'x':'do', 'y':'re', 'z':'mi'}
+  */
   $L.Map.method($L, function argDict(){
     var args = arguments.callee.caller.arguments;
     var argNames = (arguments.callee.caller + "").match(/\([^)]*\)/g);
@@ -782,7 +1305,38 @@ Lapiz.Module("Objects", ["Events"], function($L){
   });
 
   var _newClassEvent = $L.Event();
+  // > Lapiz.on.class(fn)
+  // > Lapiz.on.class = fn
+  // Event registration, event will fire whenever a new Lapiz class is defined.
   $L.Event.linkProperty($L.on, "class", _newClassEvent);
+
+  // > Lapiz.Class(constructor)
+  // > Lapiz.Class(constructor, useCustom)
+  // Used to define a class. Lapiz.on.class will fire everytime a new class
+  // is created. The returned constructor will also have an on.create method
+  // that will fire everytime a new instance is created.
+  /* >
+  var Person = Lapiz.Class(function(id, name, role, active){
+    this.properties({
+      "id": "int",
+      "name": "string",
+      "role": "string",
+      "active": "bool"
+    }, Lapiz.argDict());
+    return this.pub;
+  });
+  Person.on.create(function(person){
+    console.log(person.name);
+  });
+  var adam = Person(12, "Adam", "admin", true); //will fire create event and log "Adam"
+  */
+  // If the constructor doesn't return anything, the Lapiz object that was
+  // passed in as 'this' will be will be returned as the contructed object.
+  // If the constructor does return a value, that will be used. As in the
+  // example above, returning the public namespace is a common technique.
+  //
+  // If the second argument is 'true', a Lapiz object will not be set to 'this',
+  // instead it will be set to what whatever the calling scope is.
   $L.Class = function(fn, customObj){
     customObj = !!customObj;
     var newInstanceEvent = Lapiz.Event();
@@ -798,8 +1352,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
     } else {
       ret = function(){
         var self = Lapiz.Object();
-        var out = fn.apply(self, arguments);
-        self = (out === undefined) ? self : out;
+        self = fn.apply(self, arguments) || self;
         newInstanceEvent.fire(self);
         return self;
       };
@@ -820,8 +1373,17 @@ Lapiz.Module("Parser", function($L){
     return parser;
   }
 
+  // > Lapiz.parse
+  // Namespace for parser methods. This namespace is left open
+  // so that it can be extended, particularly for use with defining
+  // object properties.
   $L.set($L, "parse", $L.Map());
 
+  // > Lapiz.parse.int(val)
+  // > Lapiz.parse.int(val, rad)
+  // If rad is not defined it will default to 10. This is mostly a wrapper
+  // around parseInt, however if val is a boolean it will reurn eitehr 1
+  // or 0.
   $L.Map.method($L.parse, function int(val,rad){
     if (val === true){
       return 1;
@@ -832,6 +1394,13 @@ Lapiz.Module("Parser", function($L){
     return parseInt(val, rad);
   });
 
+  // > Lapiz.parse.string
+  // If val is null or undefined, returns an empty stirng. If val
+  // is a string, it is returned, if it's a number it's converted
+  // to a string. If val is an object that has a .str() method, 
+  // that will be used, if it doesn't have .str but it does have
+  // .toString, that will be used. As a last resort it will be
+  // concatted with an empty string.
   $L.Map.method($L.parse, function string(val){
     if (val === undefined || val === null) { return ""; }
     var type = typeof(val);
@@ -848,9 +1417,28 @@ Lapiz.Module("Parser", function($L){
     }
     return "" + val;
   });
+  
+  // > Lapiz.parse.bool(val)
+  // Converts val to a bool
   $L.Map.method($L.parse, function bool(val){ return !!val; });
+  
+  // > Lapiz.parse.number(val)
+  // Converts val to a number. This is a wrapper around parseFloat.
   $L.Map.method($L.parse, function number(val){ return parseFloat(val); });
+  
+  // Lapiz.parse.object(val)
+  // This is just a pass through function, not a true parser. It can
+  // be useful for object properties.
   $L.Map.method($L.parse, function object(obj){ return obj; });
+  
+  // > Lapiz.parse.array(parser)
+  // This takes a parser or a string (which will be resolved agains Lapiz.parse) 
+  // and returns an array parser.
+  /* >
+  var arrIntParser = Lapiz.parse.array("int");
+  console.log(arrIntParser([3.14, "12.34", true]); // [3, 12, 1]
+  console.log(arrIntParser("22.22"); // [22]
+  */
   $L.Map.method($L.parse, function array(parser){
     parser = resolveParser(parser);
     return function(arr){
@@ -861,7 +1449,7 @@ Lapiz.Module("Parser", function($L){
         return arr;
       }
       return [parser(arr)];
-    }
+    };
   });
 });
 Lapiz.Module("Sorter", function($L){
