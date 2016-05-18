@@ -30,14 +30,10 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
   function request(type, url, urlData, rawData, callback, headers){
     var x = _getXmlHttp();
     if (urlData !== undefined){
-      if (url.indexOf("?") === -1){
-        url += "?";
-      } else {
-        url += "&"
-      }
+      url += (url.indexOf("?") === -1) ? "?" : "&"
       url += _encodeData(data);
     }
-    if (typeof callback === 'function'){
+    if ($L.typeCheck.func(callback)){
       x.onreadystatechange = _rsChng(x, callback);
     }
     if (headers !== undefined){

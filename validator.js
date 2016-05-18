@@ -1,4 +1,4 @@
-(function ValidatorModule($L){
+Lapiz.Module("Validator", ["Collections"], function($L){
   $L.Validator = function(validation, data, formatFunc){
     var validator = function(data, formatFunc){
       formatFunc = formatFunc || $L.Validator.format.array;
@@ -31,32 +31,32 @@
     return validator;
   };
 
-  $L.Validator.required = function(name, val){
+  $L.Map.meth($L.Validator, function required(name, val){
     if (val === "" || val === undefined){
       return name + " is required";
     }
     return false;
-  };
+  });
 
-  $L.Validator.min = function(name, val, args){
+  $L.Map.meth($L.Validator, function min(name, val, args){
     var minLen = Lapiz.parse["int"](args[0]);
     var len = val.length;
     if (len < minLen && len > 0){
       return name + " must be at least " + minLen + " characters long";
     }
     return false;
-  };
+  });
 
-  $L.Validator.max = function(name, val, args){
+  $L.Map.meth($L.Validator, function max(name, val, args){
     var maxLen = Lapiz.parse["int"](args[0]);
     var len = val.length;
     if (len > maxLen){
       return name + " cannot be longer than " + maxLen + " characters";
     }
     return false;
-  };
+  });
 
-  $L.Validator.numberMin = function(name, val, args){
+  $L.Map.meth($L.Validator, function numberMin(name, val, args){
     var min = Lapiz.parse.number(args[0]);
     val = Lapiz.parse.number(val);
     if (isNaN(val)) { return false; }
@@ -64,9 +64,9 @@
       return name + " must be at least " + min;
     }
     return false;
-  };
+  });
 
-  $L.Validator.numberMax = function(name, val, args){
+  $L.Map.meth($L.Validator, function numberMax(name, val, args){
     var max = Lapiz.parse.number(args[0]);
     val = Lapiz.parse.number(val);
     if (isNaN(val)) { return false; }
@@ -74,7 +74,7 @@
       return name + " must be less than" + max;
     }
     return false;
-  };
+  });
 
   $L.Validator.number = function(name, val){
     if (val === "" || val === undefined) { return false; }
@@ -102,17 +102,20 @@
     return false;
   };
 
-  $L.Validator.format = {};
+  $L.Validator.format = Lapiz.Map();
   $L.Validator.format.array = function(errs, errBool){
-    if (!errBool) { return errBool; }
-    return errs;
+    return errBool ? errs : false;
   };
-  $L.Validator.format.divs = function(errs){
-    var errDivs = [];
+  $L.Validator.format.divs = function(errs, errBool){
+    if (!errBool){ return false; }
+    var errDivs = document.createDocumentFragment();
     $L.each(errs, function(k,v){
-      errDivs.push("<div for='"+k+"'>" + v + "</div>");
+      var div = document.createElement("div");
+      div.attributes['for'] = k;
+      div.textContent = v;
+      errDivs.appendChild(div);
     });
-    return errDivs.join("");
+    return errDivs;
   };
   $L.Validator.format.li = function(errs){
     return "<li>" + errs.join("</li><li>") + "</li>";
@@ -120,4 +123,4 @@
   $L.Validator.format.ul = function(errs){
     return "<ul>" + Validator.li(errs) + "</ul>";
   };
-})(Lapiz);
+});
