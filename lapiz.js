@@ -463,7 +463,7 @@ Lapiz.Module("Dependency", function($L){
   // Returns the dependency associated with name
   $L.Dependency = function(name){
     var d = _dependencies[name];
-    if (d === undefined) { throw "Cannot find Dependency " + name; }
+    if (d === undefined) { throw new Error("Cannot find Dependency " + name); }
     return d();
   };
 
@@ -1028,7 +1028,7 @@ Lapiz.Module("Index", function($L){
         };
       }(primaryFunc);
     } else if ( !(primaryFunc instanceof  Function) ){
-      throw("Expected a function or string");
+      throw new Error("Expected a function or string");
     }
 
     if (domain === undefined) {
