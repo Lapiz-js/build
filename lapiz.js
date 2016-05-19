@@ -90,11 +90,13 @@ var Lapiz = (function ModuleLoaderModule($L){
     }
   });
 
-  // > Lapiz.Module.Loaded()
+  // > Lapiz.Module.Loaded
   // Returns all the modules that have been loaded
-  $L.Module.Loaded = function(){
-    return Object.keys(_loaded);
-  };
+  Object.defineProperty($L.Module, "Loaded",{
+    "get": function(){
+      return Object.keys(_loaded);
+    }
+  });
   Object.freeze(self.Module);
 
   // > Lapiz.typeCheck(obj, type)
@@ -253,7 +255,10 @@ Lapiz.Module("Collections", function($L){
 
   */
   Map.meth(Map, function setterGetter(obj, name, setter, getter){
-    $L.typeCheck.func(setter, "Expected function for setterGetter");
+    if ($L.typeCheck.string(setter)){
+      setter = $L.parse[setter];
+    }
+    $L.typeCheck.func(setter, "Expected function or string reference to parser for setterGetter (argument 3)");
     var val;
     var desc = {};
     if (getter === undefined){
@@ -262,9 +267,6 @@ Lapiz.Module("Collections", function($L){
       desc.get = function() {
         return getter(val, obj);
       };
-    }
-    if ($L.typeCheck.string(setter)){
-      setter = $L.parse[setter];
     }
     desc.set = function(newVal){
       var setterInterface = {
@@ -543,7 +545,7 @@ Lapiz.Module("Dictionary", function($L){
     var _changeEvent = Lapiz.Event();
 
     if (val !== undefined) {
-      if (val.hasOwnProperty("each")){
+      if ($L.typeCheck.func(val.each)){
         val.each(function(i, val){
           _dict[i] = val;
           _length += 1;
@@ -667,7 +669,7 @@ Lapiz.Module("Dictionary", function($L){
       var key, i;
       for(i=keys.length-1; i>=0; i-=1){
         key = keys[i];
-        if (fn(key, _dict[key])) { break; }
+        if (fn(key, _dict[key])) { return key; }
       }
     };
 

@@ -1,7 +1,8 @@
-// @Module UI2
-// UI library for Lapiz.
 Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
+  
   var ui = $L.Namespace();
+  // > Lapiz.UI
+  // Namespace for the UI methods.
   $L.set($L, "UI", ui.namespace);
 
   var _nodeProp = new WeakMap();
@@ -19,6 +20,11 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // _viewAttribute is the attribute that will be used to identify views
   // it is treated as a constant and is only here for DRY
   var _viewAttribute = 'l-view';
+  // > l-view
+  // Used to create a lapiz view:
+  // > <htmlNode l-view="viewName>...</htmlNode>
+  // All nodes in the document with this attribute will be cloned and saved and
+  // the original will be removed from the document.
 
   // _loadViews is automatically invoked. It removes any node with the l-view
   // attribute and saves it as a view
@@ -30,6 +36,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     });
   }
 
+  // > Lapiz.UI.CloneView(name)
+  // Returns an html Node that is a clone of the View.
   ui.meth(function CloneView(name){
     if (_views[name] === undefined){
       throw new Error("View "+name+" is not defined");
@@ -37,6 +45,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     return _views[name].cloneNode(true);
   });
 
+  // > Lapiz.UI.View(name, viewStr)
+  // Adds a view that can be rendered or cloned.
   ui.meth(function View(name, viewStr){
     //TODO: this could use some work
     var div = document.createElement("div");
@@ -48,14 +58,16 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 
   var _attributes = $L.Map();
   var _attributeOrder = [];
-  // @method ui.attribute users can register an attribute
+  // > Lapiz.UI.attribute(name, fn)
+  // > Lapiz.UI.attribute(name, fn, before)
+  // > Lapiz.UI.attribute(attributes)
   ui.meth(function attribute(name, fn, before){
-    name = name.toLocaleLowerCase();
     if (fn === undefined){
       //define plural
       $L.each(name, Lapiz.UI.attribute)
       return;
     }
+    name = name.toLocaleLowerCase();
     _attributes[name.toLowerCase()] = fn;
     if (before === undefined){
       _attributeOrder.push(name);
@@ -70,6 +82,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   });
 
   var _mediators = $L.Map();
+  // > Lapiz.UI.mediator(mediatorName,fn)
+  // > Lapiz.UI.mediator(mediators)
   ui.meth(function mediator(mediatorName, fn){
     if (typeof mediatorName !== "string"){
       throw new Error("Mediator name must be a string");
@@ -82,6 +96,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       handler: fn,
       properties: properties
     };
+    // > Lapiz.UI.mediator.mediatorName(propertyName, property)
+    // > Lapiz.UI.mediator.mediatorName(properties)
     var registerFn = function(propName, prop){
       if (prop === undefined){
         //defining many with an array
@@ -129,6 +145,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     }
   }
 
+  // > Lapiz.UI.bind(node, ctx, templator)
   ui.meth(function bind(node, ctx, templator){
     var cur, i, attrName, attrVal, _props;
     if (node.nodeName.toLowerCase() === "script") { return; }
@@ -282,6 +299,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     return data;
   }
 
+  // > Lapiz.UI.render(renderString..., ctx);
   ui.meth(function render(){
     if (!_init){
       var argsClsr = arguments;
@@ -326,10 +344,13 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     target.appendChild(view);
   });
 
+  // > Lapiz.UI.id(elId)
+  // > Lapiz.UI.id(elId, doc)
   ui.meth(function id(elId, doc){
     return (doc || document).getElementById(elId);
   });
 
+  // > attribute:resolver
   $L.UI.attribute("resolver", function(node, ctx, resolver){
     var _props = _getProperties(node);
     var templator = $L.Template.Templator($L.Template.Std.tokenizer, resolver);
@@ -340,6 +361,11 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 });
 Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
 
+  // > attribute:if
+  // > <htmlNode if="$ctxVal">...</htmlNode>
+  // If the attrVal ($ctxVal above) evaluates to false, the node and it's
+  // children are removed. If the attribute is a function it will be invoked
+  // with no arguments and the return value will be evaluated as a boolean
   $L.UI.attribute("if", function(node, _, attrVal){
     if (typeof(attrVal) === "function") {attrVal = attrVal();}
     node.removeAttribute("if");
@@ -350,6 +376,17 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     }
   });
 
+  // > attribute:repeat
+  // Takes a collection (array, map or accessor) and repeats the node for every
+  // item in the collection.
+  /* >
+  <ul>
+    <li repeat="$people>$name</li>
+  </ul>
+  */
+  // If the collection has Lapiz event wiring (an accessor such as a Dictionary)
+  // the collection will automatically stay up to date with additions and
+  // removals. To keep thecontents up to date, also use live.
   $L.UI.attribute("repeat", function(node, _, collection){
     var templator = $L.UI.bindState.templator;
     if (collection === undefined){
@@ -427,6 +464,11 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     $L.UI.bindState.proceed = false;
   }); //End Repeat attribute
 
+  // > attribute:live
+  // > <htmlNode live>...</htmlNode>
+  // > <htmlNode live="$val">...</htmlNode>
+  // If no attribute is used, it will default to the context.
+  // When the .on.change event fires the template will be updated.
   var _liveNodes = new WeakMap();
   $L.UI.attribute("live", function(node, context, altCtx){
     var ctx = altCtx || context;
@@ -443,13 +485,42 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     }
   });
 
-  $L.UI.attribute("click", function(node, _, fn){
-    if (typeof(fn) !== "function") { throw new Error("Expected function"); }
-    node.addEventListener("click", fn);
-  });
-  $L.UI.attribute("display", function(node, ctx, fn){
-    if (typeof(fn) !== "function") { throw "Expected function"; }
-    fn(node,ctx);
+  $L.UI.attribute({
+    // > attribute:click
+    // > <htmlNode click="$ctxFn">...</htmlNode>
+    // The given function will be called with the node is clicked.
+    "click": function(node, _, fn){
+      if (typeof(fn) !== "function") { throw new Error("Expected function"); }
+      node.addEventListener("click", fn);
+    },
+    // > attribute:display
+    // > <htmlNode display="$ctxFn">...</htmlNode>
+    // The given function will be called with the node is first displayed.
+    "display": function(node, ctx, fn){
+      if (typeof(fn) !== "function") { throw "Expected function"; }
+      fn(node,ctx);
+    },
+    // > attribute:blur
+    // > <htmlNode blur="$ctxFn">...</htmlNode>
+    // The given function will be called with the node loses focus.
+    "blur": function(node, _, fn){
+      if (typeof(fn) !== "function") { throw "Expected function"; }
+      node.addEventListener("blur", fn);
+    },
+    // > attribute:submit
+    // > <htmlNode submit="$ctxFn">...</htmlNode>
+    // The given function will be called when the submit event fires.
+    "submit": function(node, _, fn){
+      if (typeof(fn) !== "function") { throw "Expected function"; }
+      node.addEventListener("submit", fn);
+    },
+    // > attribute:change
+    // > <htmlNode submit="$ctxFn">...</htmlNode>
+    // The given function will be called when the change event fires.
+    "change": function(node, _, fn){
+      if (typeof(fn) !== "function") { throw "Expected function"; }
+      node.addEventListener("change", fn);
+    }
   });
 
   function _getForm(node){
@@ -471,6 +542,17 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     return data;
   }
 
+  // > mediator:form
+  /* >
+    <form>
+      ...
+      <button click="form.formHandler">Go!</button>
+    </form>
+  */
+  // > Lapiz.UI.mediator.form("formHandler", fn(formData));
+  // The form mediator will search up the node tree until it finds
+  // a form node. All elements with a name will be added to the
+  // formData.
   $L.UI.mediator("form", function(node, _, fn){
     var form;
     return function(evt){
@@ -490,6 +572,8 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     node.setAttribute("href", "#" + hash);
   });
 
+  // > Lapiz.UI.hash(hash, fn, ctx)
+  // > Lapiz.UI.hash(hash, renderString)
   $L.UI.hash = function(hash, fn, ctx){
     var args = Array.prototype.slice.call(arguments);
     if (args.length === 0){
@@ -529,14 +613,16 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     if (_hash[hash] !== undefined){ _hash[hash].apply(this, args); }
   });
 
-  $L.UI.mediator("viewMethod", function viewMethod(node, ctx, method){
+  // > Lapiz.UI.mediator.viewMethod
+  // Useful mediator for attaching generic methods available to views.
+  $L.UI.mediator("viewMethod", function viewMethod(node, ctx, methd){
     //Todo:
     // - accept multiple view methods
     // - get name from function
     return function innerViewMethod(){
       var args = Array.prototype.slice.call(arguments); // get args
       args.splice(0,0, node, ctx); // prepend node and ctx
-      return method.apply(this, args);
+      return methd.apply(this, args);
     };
   });
 
@@ -547,6 +633,8 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     attr: /\[(\w+)=([^\]]*)\]/g
   };
 
+  // > attribute:q
+  // Quick method for defining class, id and attributes
   $L.UI.attribute("q", function(node, _, attrVal){
     var cls, attr, id;
     var clsVals = [node.className];
@@ -569,6 +657,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     node.removeAttribute("q");
   });
 
+  // > attribute:view
   $L.UI.mediator("view", function(node, ctx, viewOrGenerator){
     return function(){
       var view;
@@ -592,10 +681,12 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     };
   });
 
+  // > attribute:resolver
   Lapiz.UI.mediator("resolver", function(node, ctx, resolverFn){
     return resolverFn(node, ctx);
   });
 
+  // > attribute:selectVal
   $L.UI.attribute("selectVal", function(node, ctx, val){
     node.removeAttribute("selectVal");
     val = $L.parse.string(val);
@@ -608,10 +699,5 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
         }
       });
     });
-  });
-
-  $L.UI.attribute("change", function(node, _, fn){
-    if (typeof(fn) !== "function") { throw "Expected function"; }
-    node.addEventListener("change", fn);
   });
 });
