@@ -478,7 +478,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   UI.attribute("live", function(node, context, altCtx){
     var ctx = altCtx || context;
     var fn;
-    if ( L.typeCheck.nested(ctx, "on", "change", "func") && !_liveNodes.get(node)){
+    if ( $L.typeCheck.nested(ctx, "on", "change", "func") && !_liveNodes.get(node)){
       _liveNodes.set(node, true);
       fn = function(){
         UI.bind(node);

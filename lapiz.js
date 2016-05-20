@@ -920,12 +920,17 @@ Lapiz.Module("Events", ["Collections"], function($L){
 Lapiz.Module("Filter", function($L){
 
   // > Lapiz.Filter(accessor, filterFunc(key, accessor) )
-  // > Lapiz.Filter(accessor, attribute, val)
+  // > Lapiz.Filter(accessor, field, val)
+  // Filters an accessor based on a function of field.
+  //
+  // One edge case is that an accessor cannot filter by field
+  // for undefined. To do that, you have to create a function
+  // to check the field.
   $L.set($L, "Filter", function(accessor, filterOrField, val){
     var _index = [];
 
     // > filter(key)
-    // Returns the value associated with key
+    // Returns the value associated with key, if it exists in the filter
     var self = function(key){
       if (_index.indexOf(key) > -1) { return accessor(key); }
     };
@@ -934,6 +939,8 @@ Lapiz.Module("Filter", function($L){
     // Return Lapiz.Filter
     $L.set($L, "_cls", $L.Filter);
 
+    // if filterOrField is a string, and val is set, create a function
+    // to check that field against the val
     var filterFn = filterOrField;
     if ($L.typeCheck.string(filterOrField) && val !== undefined){
       filterFn = function(key, accessor){
@@ -942,10 +949,6 @@ Lapiz.Module("Filter", function($L){
     }
 
     $L.typeCheck.func(filterFn, "Filter must be invoked with function or attriubte and value");
-
-    var _insertEvent = Lapiz.Event();
-    var _removeEvent = Lapiz.Event();
-    var _changeEvent = Lapiz.Event();
 
     accessor.each(function(val, key){
       if (filterFn(key, accessor)) { _index.push(key); }
@@ -992,6 +995,10 @@ Lapiz.Module("Filter", function($L){
       }
     });
 
+    var _insertEvent = Lapiz.Event();
+    var _removeEvent = Lapiz.Event();
+    var _changeEvent = Lapiz.Event();
+
     // > filter.on
     // Namespace for filter events
     $L.set(self, "on", $L.Map());
@@ -1014,22 +1021,22 @@ Lapiz.Module("Filter", function($L){
     $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
-    var inFn = function(key, accessor){
+    function inFn(key, accessor){
       key = key.toString();
       if (filterFn(key, accessor)){
         _index.push(key);
         _insertEvent.fire(key, self);
       }
-    };
-    var remFn = function(key, obj, accessor){
+    }
+    function remFn(key, obj, accessor){
       key = key.toString();
       var i = _index.indexOf(key);
       if (i > -1){
         _index.splice(i, 1);
         _removeEvent.fire(key, obj, self);
       }
-    };
-    var changeFn = function(key, accessor, oldVal){
+    }
+    function changeFn(key, accessor, oldVal){
       key = key.toString();
       var i = _index.indexOf(key);
       var f = filterFn(key, accessor);
@@ -1049,7 +1056,7 @@ Lapiz.Module("Filter", function($L){
           _insertEvent.fire(key, self);
         }
       }
-    };
+    }
 
     accessor.on.insert(inFn);
     accessor.on.remove(remFn);
@@ -1096,12 +1103,16 @@ Lapiz.Module("Filter", function($L){
       filterFn.on.change(self.ForceRescan);
     }
 
-    $L.set(self, "delete", function(){
+    // > filter.kill()
+    // After calling kill, a Filter is no longer live. It will not receive
+    // updates and can more easily be garbage collected (because it's
+    // parent accessor no longer has any references to it).
+    $L.set(self, function kill(){
       accessor.on.insert.deregister(inFn);
       accessor.on.remove.deregister(remFn);
       accessor.on.change.deregister(changeFn);
-      if (filterFn.on !== undefined && filterFn.on.change !== undefined && filterFn.on.change.deregister !== undefined){
-        filterFn.on.change(self.ForceRescan);
+      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
+        filterFn.on.change.deregister(self.ForceRescan);
       }
     });
 

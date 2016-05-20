@@ -43,13 +43,12 @@ Lapiz.Module("Template", ["Collections"], function($L){
     if (token === "$") { return ctx; }
     var val, l, i;
     token = token.split(".");
-    val = ctx[token[0]];
     l = token.length;
-    for(i=1; i<l; i+=1){
-      if (val === undefined) { return val; }
-      val = val[token[i]];
+    for(i=0; i<l; i+=1){
+      if (ctx === undefined) { return ctx; }
+      ctx = ctx[token[i]];
     }
-    return val;
+    return ctx;
   });
 
   self.meth(function Templator(tokenizer, resolver){
