@@ -143,6 +143,24 @@ var Lapiz = (function ModuleLoaderModule($L){
   // will throw err if obj is not an number.
   $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err)});
 
+  // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
+  // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunctionName)
+  // Checks that each nested field exists and that the last field matches the function type.
+  // So this:
+  // > if (collection.key !== undefined && collection.key.on !== undefined && Lapiz.typeCheck.func(collection.key.on.change)){
+  // becomes:
+  // > if (Lapiz.typeCheck.nested(collection, "key", "on", "change", "func")){
+  $L.set($L.typeCheck, "nested", function(){
+    var args = Array.prototype.slice.call(arguments);
+    $L.assert(args.length >= 2, "Lapiz.typeCheck.nested requres at least 2 arguments");
+    var typeCheckFn = args.pop();
+    typeCheckFn = $L.typeCheck.string(typeCheckFn) ? $L.typeCheck[typeCheckFn] : typeCheckFn;
+    $L.typeCheck.func(typeCheckFn, "Last argument to Lapiz.typeCheck.nested must be a function");
+    var obj;
+    for(obj = args.shift(); obj !== undefined && args.length > 0 ; obj = obj[args.shift()]);
+    return typeCheckFn(obj);
+  });
+
   // > Lapiz.assert(bool, err)
   // If bool evaluates to false, an error is thrown with err.
   $L.set($L, "assert", function(bool, err){
@@ -393,24 +411,24 @@ Lapiz.Module("Collections", function($L){
     if (i > -1) { arr.splice(i, 1); }
   });
 
-  // > Lapiz.each(collection, fn(key, val))
+  // > Lapiz.each(collection, fn(val, key, collection))
   // Iterates over the collection, calling func(key, val) for each item in the
   // collection. If the collection is an array, key will be the index. If func
   // returns true (or an equivalent value) the Lapiz.each will return the
   // current key allowing each to act as a search.
   /* >
   var arr = [3,1,4,1,5,9];
-  Lapiz.each(arr, function(key,val){
+  Lapiz.each(arr, function(val, key){
     console.log(key, val);
   });
-  var gt4 = Lapiz.each(arr, function(key,val){return val > 4;});
+  var gt4 = Lapiz.each(arr, function(val, key){return val > 4;});
 
   var kv = {
     "A":"apple",
     "B":"banana",
     "C":"cantaloupe"
   };
-  Lapiz.each(kv, function(key,val){
+  Lapiz.each(kv, function(val, key){
     console.log(key, val);
   });
   */
@@ -419,13 +437,13 @@ Lapiz.Module("Collections", function($L){
     if (obj instanceof Array){
       var l = obj.length;
       for(i=0; i<l; i+=1){
-        if (fn(i, obj[i])) {return i;}
+        if (fn(obj[i], i)) {return i;}
       }
       return -1;
     } else {
       var keys = Object.keys(obj);
       for(i=keys.length-1; i>=0; i-=1){
-        if (fn(keys[i], obj[keys[i]])) {return keys[i];}
+        if (fn(obj[keys[i]], keys[i], obj)) {return keys[i];}
       }
     }
   });
@@ -439,9 +457,9 @@ Lapiz.Module("Collections", function($L){
   Map.meth($L, function ArrayConverter(accessor){
     var arr = [];
     var index = [];
-    accessor.each(function(i, obj){
+    accessor.each(function(obj, key){
       arr.push(obj);
-      index.push(i);
+      index.push(key);
     });
 
     accessor.on.insert(function(key, accessor){
@@ -552,13 +570,13 @@ Lapiz.Module("Dictionary", function($L){
 
     if (val !== undefined) {
       if ($L.typeCheck.func(val.each)){
-        val.each(function(i, val){
-          _dict[i] = val;
+        val.each(function(val, key){
+          _dict[key] = val;
           _length += 1;
         });
       } else {
-        $L.each(val, function(i, val){
-          _dict[i] = val;
+        $L.each(val, function(val, key){
+          _dict[key] = val;
           _length += 1;
         });
       }
@@ -568,22 +586,22 @@ Lapiz.Module("Dictionary", function($L){
     // > dict(key, val)
     // If only key is given, the value currently associated with that key will
     // be returned. If key and val are both given, val is associated with key
-    // and the proper event (change or insert) will fire.
+    // and the proper event (change or insert) will fire. For chaining, the
+    // val is returned when dict is called as a setter.
     var self = function(key, val){
       if (val === undefined){
         return _dict[key];
       }
 
-      var event;
-      if (_dict[key] === undefined){
+      var oldVal = _dict[key];
+      _dict[key] = val;
+      if ( oldVal === undefined){
         _length += 1;
-        event = _insertEvent;
+        _insertEvent.fire(key, self.Accessor);
       } else {
-        event = _changeEvent;
+        _changeEvent.fire(key, self.Accessor, oldVal);
       }
 
-      _dict[key] = val;
-      event.fire(key, self.Accessor);
       return val;
     };
 
@@ -633,7 +651,35 @@ Lapiz.Module("Dictionary", function($L){
     // Event will fire when a new key is added to the dictionary
     $L.Event.linkProperty(self.on, "insert", _insertEvent);
     // > dict.on.change(fn(key, accessor))
-    // Event will fire when a new key has a new value associated with it
+    // Event will fire when a new key has a new value associated with it.
+    //
+    // One poentential "gotcha":
+    /* >
+      var d = Dict();
+      d.on.change = function(key, acc){
+        console.log(key, acc(key));
+      };
+      //assume person is a Lapiz Class
+      d(5, Person(5, "Adam", "admin")); // does not fire change, as it's an insert
+      d(5).role = "editor"; // this will fire person.on.change, but not dict.on.change
+      d(5, Person(5, "Bob", "editor")); // this will fire dict.on.change
+    */
+    // To create a change listener for a class on a dict (or other accessor)
+    /*
+      function chgFn(key, acc){...}
+      d.on.insert(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.remove(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.change(function(key, acc, old){
+        old.on.change.deregister(chgFn);
+        var val = acc(key);
+        val.on.change(chgFn);
+        chgFn(key, acc);
+      });
+    */
     $L.Event.linkProperty(self.on, "change", _changeEvent);
     // > dict.on.remove(fn(key, val, accessor))
     // Event will fire when a key is removed.
@@ -675,7 +721,7 @@ Lapiz.Module("Dictionary", function($L){
       var key, i;
       for(i=keys.length-1; i>=0; i-=1){
         key = keys[i];
-        if (fn(key, _dict[key])) { return key; }
+        if (fn(_dict[key], key)) { return key; }
       }
     };
 
@@ -709,7 +755,7 @@ Lapiz.Module("Dictionary", function($L){
     // * accessor.length
     // * accessor.keys
     // * accessor.has(key)
-    // * accessor.each(fn(key, val))
+    // * accessor.each(fn(val, key))
     // * accessor.on.insert
     // * accessor.on.change
     // * accessor.on.remove
@@ -756,6 +802,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     // The event.register method takes a function. All registered functions will
     // be called when the event fires.
     $L.Map.setterMethod(event, function register(fn){
+      $L.typeCheck.func(fn, "Event registration requires a function");
       _listeners.push(fn);
       return fn;
     });
@@ -776,9 +823,11 @@ Lapiz.Module("Events", ["Collections"], function($L){
     $L.Map.meth(event, function fire(){
       if (!event.fire.enabled) { return event; }
       var i;
-      var l = _listeners.length;
+      // make a copy in case _listeners changes during fire event
+      var listeners = _listeners.slice(0);
+      var l = listeners.length;
       for(i=0; i<l; i+=1){
-        _listeners[i].apply(this, arguments);
+        listeners[i].apply(this, arguments);
       }
       return event;
     });
@@ -870,57 +919,98 @@ Lapiz.Module("Events", ["Collections"], function($L){
 });
 Lapiz.Module("Filter", function($L){
 
-  // > Lapiz.Filter(accessor, filterFunc)
+  // > Lapiz.Filter(accessor, filterFunc(key, accessor) )
   // > Lapiz.Filter(accessor, attribute, val)
-  $L.set($L, "Filter", function(accessor, filterOrAttr, val){
+  $L.set($L, "Filter", function(accessor, filterOrField, val){
     var _index = [];
+
+    // > filter(key)
+    // Returns the value associated with key
     var self = function(key){
       if (_index.indexOf(key) > -1) { return accessor(key); }
     };
-    self._cls = $L.Filter;
 
-    var filterFn = filterOrAttr;
-    if ($L.typeCheck.string(filterOrAttr) && val !== undefined){
+    // > filter._cls
+    // Return Lapiz.Filter
+    $L.set($L, "_cls", $L.Filter);
+
+    var filterFn = filterOrField;
+    if ($L.typeCheck.string(filterOrField) && val !== undefined){
       filterFn = function(key, accessor){
-        return accessor(key)[filterOrAttr] === val;
+        return accessor(key)[filterOrField] === val;
       };
     }
+
+    $L.typeCheck.func(filterFn, "Filter must be invoked with function or attriubte and value");
 
     var _insertEvent = Lapiz.Event();
     var _removeEvent = Lapiz.Event();
     var _changeEvent = Lapiz.Event();
 
-    accessor.each(function(key, val){
+    accessor.each(function(val, key){
       if (filterFn(key, accessor)) { _index.push(key); }
     });
 
-    self.Accessor = self;
-    self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
-    self.Filter = function(filterOrAttr, val){ return $L.Filter(self, filterOrAttr, val); };
+    // > filter.Accessor
+    // Returns a reference to self
+    $L.set(self, "Accessor", self);
 
-    self.has = function(key){
+    // > filter.Sort(sorterFunction)
+    // > filter.Sort(fieldName)
+    // Returns a Sorter
+    $L.Map.meth(self, function Sort(funcOrField){ return $L.Sort(self, funcOrField); });
+
+    // > filter.Filter(filterFunction)
+    // > filter.Filter(field, val)
+    // Returns a filter.
+    $L.Map.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
+
+    // > filter.has(key)
+    // Returns a bool indicating if the filter contains the key
+    $L.Map.meth(self, function has(key){
       return _index.indexOf(key.toString()) > -1;
-    };
+    });
 
+    // > filter.keys
+    // Returns an array of keys
     $L.Map.getter(self, function keys(){
       return _index.slice(0);
     });
+
+    // > filter.length
+    // Read-only property that returns the length
     $L.Map.getter(self, function length(){
       return _index.length;
     });
 
-    self.each = function(fn){
+    $L.Map.meth(self, function each(fn){
       var i;
       var l = _index.length;
       for(i=0; i<l; i+=1){
         key = _index[i];
         if (fn(key, accessor(key))) { break; }
       }
-    };
+    });
 
-    self.on = $L.Map();
+    // > filter.on
+    // Namespace for filter events
+    $L.set(self, "on", $L.Map());
+
+    // > filter.on.insert( function(key, accessor) )
+    // > filter.on.insert = function(key, accessor)
+    // Registration for insert event which fires when a new value is added to
+    // the filter
     $L.Event.linkProperty(self.on, "insert", _insertEvent);
+
+    // > filter.on.change( function(key, accessor) )
+    // > filter.on.change = function(key, accessor)
+    // Registration of change event which fires when a new value is assigned to
+    // an existing key
     $L.Event.linkProperty(self.on, "change", _changeEvent);
+
+    // > filter.on.remove( function(key, val, accessor) )
+    // > filter.on.remove = function(key, val, accessor)
+    // Registration for remove event which fires when a value is removed
     $L.Event.linkProperty(self.on, "remove", _removeEvent);
     Object.freeze(self.on);
 
@@ -939,14 +1029,14 @@ Lapiz.Module("Filter", function($L){
         _removeEvent.fire(key, obj, self);
       }
     };
-    var changeFn = function(key, accessor){
+    var changeFn = function(key, accessor, oldVal){
       key = key.toString();
       var i = _index.indexOf(key);
       var f = filterFn(key, accessor);
       if (i > -1){
         if (f) {
           // was in the list, still in the list, but changed
-          _changeEvent.fire(key, self);
+          _changeEvent.fire(key, self, oldVal);
         } else {
           // was in the list, is not now
           _index.splice(i, 1);
@@ -965,18 +1055,10 @@ Lapiz.Module("Filter", function($L){
     accessor.on.remove(remFn);
     accessor.on.change(changeFn);
 
-    Object.defineProperty(self, "func", {
-      set: function(fn){
-        if (filterFn.on !== undefined && filterFn.on.change !== undefined && filterFn.on.change.deregister !== undefined){
-          filterFn.on.change(self.ForceRescan);
-        }
-        filterFn = fn;
-        self.ForceRescan();
-      }
-    })
-
-    self.ForceRescan = function(){
-      accessor.each(function(key, val){
+    // > filter.ForceRescan()
+    // Rescans all values from parent access and fires insert and remove events
+    $L.Map.meth(self, function ForceRescan(){
+      accessor.each(function(val, key){
         key = key.toString();
         var willBeInSet = filterFn(key, accessor);
         var idx = _index.indexOf(key)
@@ -989,21 +1071,39 @@ Lapiz.Module("Filter", function($L){
           _removeEvent.fire(key, accessor(key), self);
         }
       });
-    };
+    });
 
-    //todo: potential conflict if filter function is set using filter.func = function(){...}
-    if (filterFn.on !== undefined && filterFn.on.change !== undefined){
+    // > filter.func(filterFunc(key, accessor))
+    // > filter.func = filterFunc(key, accessor)
+    // Changes the function used for the filter. The insert and remove events
+    // will fire as the members are scanned to check if they comply with the
+    // new members
+    $L.Map.setterMethod(self, function func(fn){
+      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
+        filterFn.on.change.deregister(self.ForceRescan);
+      }
+      filterFn = fn;
+      if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
+        filterFn.on.change(self.ForceRescan);
+      }
+      self.ForceRescan();
+    });
+
+    // > filter.func.on.change
+    // If the function supplied for filter function has a change event,
+    // then when that event fires, it will force a rescan.
+    if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
       filterFn.on.change(self.ForceRescan);
     }
 
-    self["delete"] = function(){
+    $L.set(self, "delete", function(){
       accessor.on.insert.deregister(inFn);
       accessor.on.remove.deregister(remFn);
       accessor.on.change.deregister(changeFn);
       if (filterFn.on !== undefined && filterFn.on.change !== undefined && filterFn.on.change.deregister !== undefined){
         filterFn.on.change(self.ForceRescan);
       }
-    };
+    });
 
     Object.freeze(self);
     return self;
@@ -1048,7 +1148,7 @@ Lapiz.Module("Index", function($L){
 
     var _primary = $L.Dictionary();
 
-    // > indexedClass.each( function(key, val))
+    // > indexedClass.each( function(val, key))
     domain.each = _primary.each;
 
     // > indexedClass.has(key)
@@ -1093,12 +1193,12 @@ Lapiz.Module("Index", function($L){
     domain.get = function(idFuncOrAttr, val){
       var matches = {};
       if (val !== undefined){
-        _primary.each(function(key, obj){
+        _primary.each(function(obj, key){
           if (obj[idFuncOrAttr] === val) { matches[key] = obj; }
         });
         return matches;
       } else if (idFuncOrAttr instanceof Function){
-        _primary.each(function(key, obj){
+        _primary.each(function(obj, key){
           if (idFuncOrAttr(obj)) { matches[key] = obj; }
         });
         return matches;
@@ -1571,7 +1671,7 @@ Lapiz.Module("Sorter", function($L){
       var l = _index.length;
       for(i=0; i<l; i+=1){
         key = _index[i];
-        if (fn(key, accessor(key))) { break; }
+        if (fn(accessor(key), key)) { break; }
       }
     };
 
@@ -1585,7 +1685,8 @@ Lapiz.Module("Sorter", function($L){
       set: function(fn){
         _sortFn = fn;
         _index.sort(_sortFn);
-        accessor.each( function(key, _){
+        //todo: this seems shady...
+        accessor.each( function(val, key){
           _changeEvent.fire(key, self);
         });
       }
@@ -1600,11 +1701,11 @@ Lapiz.Module("Sorter", function($L){
       $L.remove(_index, key.toString());
       _removeEvent.fire(key, obj, self);
     };
-    var changeFn = function(key, accessor){
+    var changeFn = function(key, oldVal, accessor){
       key = key.toString();
       _index.splice(_index.indexOf(key),1);
       _index.splice($L.Sort.locationOf(key, _index, _sortFn, accessor), 0, key);
-      _changeEvent.fire(key, self);
+      _changeEvent.fire(key, oldVal, self);
     };
 
     accessor.on.insert(inFn);

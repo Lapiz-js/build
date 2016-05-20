@@ -4,12 +4,12 @@ Lapiz.Module("Validator", ["Collections"], function($L){
       formatFunc = formatFunc || $L.Validator.format.array;
       var errs = {};
       var errBool = false;
-      Lapiz.each(validation, function(key, validator){
+      Lapiz.each(validation, function(validator, key){
         validator = validator.split("|");
         var val = data[key];
         var name = validator.shift();
         errs[key] = [];
-        Lapiz.each(validator, function(i, validator){
+        Lapiz.each(validator, function(validator){
           args = validator.split(":");
           var vName = args.shift();
           validator = $L.Validator[vName];
@@ -109,7 +109,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
   $L.Validator.format.divs = function(errs, errBool){
     if (!errBool){ return false; }
     var errDivs = document.createDocumentFragment();
-    $L.each(errs, function(k,v){
+    $L.each(errs, function(v, k){
       var div = document.createElement("div");
       div.attributes['for'] = k;
       div.textContent = v;

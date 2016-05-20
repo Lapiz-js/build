@@ -12,7 +12,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
 
   function _encodeData(data){
     var dataStr = [];
-    $L.each(data, function(k,v){
+    $L.each(data, function(v, k){
       dataStr.push(encodeURI(k) + "=" + encodeURI(v));
     });
     return dataStr.join("&");
@@ -37,7 +37,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
       x.onreadystatechange = _rsChng(x, callback);
     }
     if (headers !== undefined){
-      Lapiz.each(headers, function(key, val){
+      $L.each(headers, function(val, key){
         x.setRequestHeader(key, val);
       });
     }
