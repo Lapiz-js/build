@@ -22,7 +22,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   var _viewAttribute = 'l-view';
   // > l-view
   // Used to create a lapiz view:
-  // > <htmlNode l-view="viewName>...</htmlNode>
+  // > <htmlNode l-view="viewName">...</htmlNode>
   // All nodes in the document with this attribute will be cloned and saved and
   // the original will be removed from the document.
 

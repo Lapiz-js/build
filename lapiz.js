@@ -822,7 +822,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
 
     // > singleEvent.fire
     $L.Map.meth(facade, function fire(){
-      if (_hasFired) { return; }
+      if (_hasFired || !_event.fire.enabled) { return; }
       _hasFired = true;
       _args = arguments;
       _event.fire.apply(this, _args);
@@ -1124,7 +1124,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
         var oldVal = self.attr[field];
         self.attr[field] = val;
         if (setterInterface.fireChange) {self.fire.change(self.pub);}
-        if (typeof setterInterface.event === "function") {event(self, val, oldVal);}
+        if (typeof setterInterface.event === "function") {setterInterface.event(self, val, oldVal);}
       }
     };
   }
