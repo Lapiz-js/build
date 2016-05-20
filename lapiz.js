@@ -205,6 +205,12 @@ Lapiz.Module("Collections", function($L){
     Object.defineProperty(obj, name, desc);
   });
 
+  // > Lapiz.Map.has(obj, field)
+  // Wrapper around Object.hasOwnProperty, useful for maps.
+  Map.meth(Map, function has(obj, field){
+    Object.hasOwnProperty.call(obj, field);
+  });
+
   // > Lapiz.Map.getter(object, namedGetterFunc)
   // Attaches a getter method to an object. The method must be a named function.
   /* >
