@@ -593,9 +593,6 @@ Lapiz.Module("Dictionary", function($L){
   $L.set($L, "Dictionary", function(val){
     var _dict = $L.Map();
     var _length = 0;
-    var _insertEvent = Lapiz.Event();
-    var _removeEvent = Lapiz.Event();
-    var _changeEvent = Lapiz.Event();
 
     if (val !== undefined) {
       if ($L.typeCheck.func(val.each)){
@@ -634,7 +631,54 @@ Lapiz.Module("Dictionary", function($L){
       return val;
     };
 
-    self._cls = $L.Dictionary;
+    // > dict._cls
+    $L.set(self, "_cls", $L.Dictionary);
+
+    // > dict.on
+    // Namespace for dictionary events
+    self.on = $L.Map();
+
+    // > dict.on.insert(fn(key, accessor))
+    // Event will fire when a new key is added to the dictionary
+    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
+
+    // > dict.on.remove(fn(key, val, accessor))
+    // Event will fire when a key is removed.
+    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
+
+    // > dict.on.change(fn(key, accessor))
+    // Event will fire when a new key has a new value associated with it.
+    //
+    // One poentential "gotcha":
+    /* >
+      var d = Dict();
+      d.on.change = function(key, acc){
+        console.log(key, acc(key));
+      };
+      //assume person is a Lapiz Class
+      d(5, Person(5, "Adam", "admin")); // does not fire change, as it's an insert
+      d(5).role = "editor"; // this will fire person.on.change, but not dict.on.change
+      d(5, Person(5, "Bob", "editor")); // this will fire dict.on.change
+    */
+    // To create a change listener for a class on a dict (or other accessor)
+    /*
+      function chgFn(key, acc){...}
+      d.on.insert(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.remove(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.change(function(key, acc, old){
+        old.on.change.deregister(chgFn);
+        var val = acc(key);
+        val.on.change(chgFn);
+        chgFn(key, acc);
+      });
+    */
+    var _changeEvent = $L.Event.linkProperty(self.on, "change", _changeEvent);
+
+    Object.freeze(self.on);
 
     // > dict.length
     // A read-only property that returns the length of a dictionary
@@ -671,49 +715,6 @@ Lapiz.Module("Dictionary", function($L){
         _removeEvent.fire(key, obj, self.Accessor);
       }
     };
-
-    // > dict.on
-    // Namespace for dictionary events
-    self.on = $L.Map();
-
-    // > dict.on.insert(fn(key, accessor))
-    // Event will fire when a new key is added to the dictionary
-    $L.Event.linkProperty(self.on, "insert", _insertEvent);
-    // > dict.on.change(fn(key, accessor))
-    // Event will fire when a new key has a new value associated with it.
-    //
-    // One poentential "gotcha":
-    /* >
-      var d = Dict();
-      d.on.change = function(key, acc){
-        console.log(key, acc(key));
-      };
-      //assume person is a Lapiz Class
-      d(5, Person(5, "Adam", "admin")); // does not fire change, as it's an insert
-      d(5).role = "editor"; // this will fire person.on.change, but not dict.on.change
-      d(5, Person(5, "Bob", "editor")); // this will fire dict.on.change
-    */
-    // To create a change listener for a class on a dict (or other accessor)
-    /*
-      function chgFn(key, acc){...}
-      d.on.insert(function(key, acc){
-        acc(key).on.change(chgFn);
-      });
-      d.on.remove(function(key, acc){
-        acc(key).on.change(chgFn);
-      });
-      d.on.change(function(key, acc, old){
-        old.on.change.deregister(chgFn);
-        var val = acc(key);
-        val.on.change(chgFn);
-        chgFn(key, acc);
-      });
-    */
-    $L.Event.linkProperty(self.on, "change", _changeEvent);
-    // > dict.on.remove(fn(key, val, accessor))
-    // Event will fire when a key is removed.
-    $L.Event.linkProperty(self.on, "remove", _removeEvent);
-    Object.freeze(self.on);
 
     // > dict.has(key)
     // The has method returns a boolean stating if the dictionary has the given
@@ -938,10 +939,14 @@ Lapiz.Module("Events", ["Collections"], function($L){
   map.foo.deregister(fn);
   */
   $L.set($L.Event, "linkProperty", function(obj, name, evt){
+    if (evt === undefined){
+      evt = $L.Event();
+    }
     Object.defineProperty(obj, name, {
       get: function(){ return evt.register; },
       set: function(fn){ evt.register(fn); }
     });
+    return evt;
   });
 
   $L.on = $L.Map();
