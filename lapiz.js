@@ -642,11 +642,11 @@ Lapiz.Module("Dictionary", function($L){
     // Event will fire when a new key is added to the dictionary
     var _insertEvent = $L.Event.linkProperty(self.on, "insert");
 
-    // > dict.on.remove(fn(key, val, accessor))
+    // > dict.on.remove(fn(key, accessor, oldVal))
     // Event will fire when a key is removed.
     var _removeEvent = $L.Event.linkProperty(self.on, "remove");
 
-    // > dict.on.change(fn(key, accessor))
+    // > dict.on.change(fn(key, accessor, oldVal))
     // Event will fire when a new key has a new value associated with it.
     //
     // One poentential "gotcha":
@@ -712,7 +712,7 @@ Lapiz.Module("Dictionary", function($L){
         _length -= 1;
         var obj = _dict[key];
         delete _dict[key];
-        _removeEvent.fire(key, obj, self.Accessor);
+        _removeEvent.fire(key, self.Accessor, obj);
       }
     };
 
@@ -1029,10 +1029,6 @@ Lapiz.Module("Filter", function($L){
       }
     });
 
-    var _insertEvent = Lapiz.Event();
-    var _removeEvent = Lapiz.Event();
-    var _changeEvent = Lapiz.Event();
-
     // > filter.on
     // Namespace for filter events
     $L.set(self, "on", $L.Map());
@@ -1041,18 +1037,18 @@ Lapiz.Module("Filter", function($L){
     // > filter.on.insert = function(key, accessor)
     // Registration for insert event which fires when a new value is added to
     // the filter
-    $L.Event.linkProperty(self.on, "insert", _insertEvent);
+    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
 
     // > filter.on.change( function(key, accessor) )
     // > filter.on.change = function(key, accessor)
     // Registration of change event which fires when a new value is assigned to
     // an existing key
-    $L.Event.linkProperty(self.on, "change", _changeEvent);
+    var _changeEvent = $L.Event.linkProperty(self.on, "change");
 
     // > filter.on.remove( function(key, val, accessor) )
     // > filter.on.remove = function(key, val, accessor)
     // Registration for remove event which fires when a value is removed
-    $L.Event.linkProperty(self.on, "remove", _removeEvent);
+    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
     Object.freeze(self.on);
 
     function inFn(key, accessor){
@@ -1062,12 +1058,12 @@ Lapiz.Module("Filter", function($L){
         _insertEvent.fire(key, self);
       }
     }
-    function remFn(key, obj, accessor){
+    function remFn(key, accessor, oldVal){
       key = key.toString();
       var i = _index.indexOf(key);
       if (i > -1){
         _index.splice(i, 1);
-        _removeEvent.fire(key, obj, self);
+        _removeEvent.fire(key, self, oldVal);
       }
     }
     function changeFn(key, accessor, oldVal){
@@ -1687,9 +1683,6 @@ Lapiz.Module("Sorter", function($L){
 
     var _index = accessor.keys;
     var _sortFn;
-    var _insertEvent = Lapiz.Event();
-    var _removeEvent = Lapiz.Event();
-    var _changeEvent = Lapiz.Event();
 
     if (funcOrField === undefined){
       _sortFn = function(a, b){
@@ -1738,9 +1731,9 @@ Lapiz.Module("Sorter", function($L){
     };
 
     self.on = $L.Map();
-    $L.Event.linkProperty(self.on, "insert", _insertEvent);
-    $L.Event.linkProperty(self.on, "change", _changeEvent);
-    $L.Event.linkProperty(self.on, "remove", _removeEvent);
+    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
+    var _changeEvent = $L.Event.linkProperty(self.on, "change");
+    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
     Object.freeze(self.on);
 
     Object.defineProperty(self, "func", {
@@ -1749,7 +1742,7 @@ Lapiz.Module("Sorter", function($L){
         _index.sort(_sortFn);
         //todo: this seems shady...
         accessor.each( function(val, key){
-          _changeEvent.fire(key, self);
+          _changeEvent.fire(key, self, self(key));
         });
       }
     });
@@ -1759,15 +1752,15 @@ Lapiz.Module("Sorter", function($L){
       _index.splice($L.Sort.locationOf(key, _index, _sortFn, accessor), 0, key);
       _insertEvent.fire(key, self);
     };
-    var remFn = function(key, obj, accessor){
+    var remFn = function(key, accessor, oldVal){
       $L.remove(_index, key.toString());
-      _removeEvent.fire(key, obj, self);
+      _removeEvent.fire(key, self, oldVal);
     };
-    var changeFn = function(key, oldVal, accessor){
+    var changeFn = function(key, accessor, oldVal){
       key = key.toString();
       _index.splice(_index.indexOf(key),1);
       _index.splice($L.Sort.locationOf(key, _index, _sortFn, accessor), 0, key);
-      _changeEvent.fire(key, oldVal, self);
+      _changeEvent.fire(key, self, oldVal);
     };
 
     accessor.on.insert(inFn);
