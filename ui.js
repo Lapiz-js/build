@@ -406,7 +406,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     node.removeAttribute("repeat");
 
     var nodeTemplate = node.cloneNode(true); // it may be possible to do this without making a copy.
-    var fn = function(key, val){
+    var fn = function(val, key){
       var clone = nodeTemplate.cloneNode(true);
       index[key] = clone;
       UI.bind(clone, val, templator);
@@ -454,8 +454,8 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
       }
 
       if ($L.typeCheck.func(collection.on.change) && delFn && insFn){
-        chgFn = function(key, obj, accessor){
-          delFn(key, obj, accessor);
+        chgFn = function(key, accessor, oldVal){
+          delFn(key, accessor, oldVal);
           insFn(key, accessor);
         }
         collection.on.change(chgFn);
