@@ -1631,9 +1631,9 @@ Lapiz.Module("Parser", function($L){
     if (type === "string") { return val; }
     if (type === "number") { return ""+val; }
     var strFromMethod;
-    if ("str" in val && val.str instanceof Function) {
+    if ($L.typeCheck.nested(val, "str", "func")) {
       strFromMethod = val.str();
-    } else if ("toString" in val && val.toString instanceof Function) {
+    } else if ($L.typeCheck.nested(val, "toString", "func")) {
       strFromMethod = val.toString();
     }
     if (typeof strFromMethod === "string"){
