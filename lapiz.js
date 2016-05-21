@@ -192,10 +192,25 @@ Lapiz.Module("Collections", function($L){
   Lapiz.Map.meth(x, function foo(){...});
   x.foo(); //calls foo
   */
-  $L.set(Map, "meth", function(obj, fn){
-    $L.typeCheck.func(fn, "Expected function");
-    $L.assert(fn.name !== "", "Require named function for method");
-    $L.set(obj, fn.name, fn);
+  $L.set(Map, "meth", function(obj, name, fn){
+    if (name === undefined && $L.typeCheck.func(obj)){
+      throw new Error("Meth called without object: "+fn.name);
+    }
+    if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
+      $L.assert(name !=="", "Meth name cannot be empty string");
+    } else if ($L.typeCheck.func(name) && name.name !== ""){
+      fn = name;
+      name = fn.name;
+    } else {
+      throw new Error("Meth requires either name and func or named function");
+    }
+    $L.set(obj, name, fn);
+  });
+
+  // > Lapiz.Map.prop(obj, name, desc)
+  // Just a wrapper around Object.defineProperty
+  Map.meth(Map, function prop(obj, name, desc){
+    Object.defineProperty(obj, name, desc);
   });
 
   // > Lapiz.Map.setterMethod(obj, namedSetterFunc)
@@ -208,19 +223,22 @@ Lapiz.Module("Collections", function($L){
   x.foo("bar");
   x.foo = "bar";
   */
-  Map.meth(Map, function setterMethod(obj, fn){
-    $L.typeCheck.func(fn, "Expected function for setterMethod");
-    $L.assert(fn.name !== "", "Require named function for setterMethod");
-    Object.defineProperty(obj, fn.name, {
+  Map.meth(Map, function setterMethod(obj, name, fn){
+    if (name === undefined && $L.typeCheck.func(obj)){
+      throw new Error("SetterMethod called without object: "+fn.name);
+    }
+    if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
+      $L.assert(name !=="", "SetterMethod name cannot be empty string");
+    } else if ($L.typeCheck.func(name) && name.name !== ""){
+      fn = name;
+      name = fn.name;
+    } else {
+      throw new Error("SetterMethod requires either name and func or named function");
+    }
+    Map.prop(obj, name, {
       "get": function(){ return fn; },
       "set": fn,
     });
-  });
-
-  // > Lapiz.Map.prop(obj, name, desc)
-  // Just a wrapper around Object.defineProperty
-  Map.meth(Map, function prop(obj, name, desc){
-    Object.defineProperty(obj, name, desc);
   });
 
   // > Lapiz.Map.has(obj, field)
@@ -229,7 +247,8 @@ Lapiz.Module("Collections", function($L){
     Object.hasOwnProperty.call(obj, field);
   });
 
-  // > Lapiz.Map.getter(object, namedGetterFunc)
+  // > Lapiz.Map.getter(object, namedGetterFunc() )
+  // > Lapiz.Map.getter(object, name, getterFunc() )
   // Attaches a getter method to an object. The method must be a named function.
   /* >
   var x = Lapiz.Map();
@@ -242,10 +261,19 @@ Lapiz.Module("Collections", function($L){
   console.log(x.foo); //0
   console.log(x.foo); //1
   */
-  Map.meth(Map, function getter(obj, fn){
-    $L.typeCheck.func(fn, "Expected function for getter");
-    $L.assert(fn.name !== "", "Require named function for getter");
-    Object.defineProperty(obj, fn.name, {"get": fn,} );
+  Map.meth(Map, function getter(obj, name, fn){
+    if (name === undefined && $L.typeCheck.func(obj)){
+      throw new Error("Getter called without object: "+fn.name);
+    }
+    if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
+      $L.assert(name !=="", "Getter name cannot be empty string");
+    } else if ($L.typeCheck.func(name) && name.name !== ""){
+      fn = name;
+      name = fn.name;
+    } else {
+      throw new Error("Getter requires either name and func or named function");
+    }
+    Map.prop(obj, name, {"get": fn,} );
   });
 
   // > Lapiz.Map.setterGetter(obj, name, setterFunc, getterFunc)
@@ -288,6 +316,7 @@ Lapiz.Module("Collections", function($L){
     if (getter === undefined){
       desc.get = function(){ return val; };
     } else {
+      $L.typeCheck.func(getter, "Getter must be undefined or a function");
       desc.get = function() {
         return getter(val, obj);
       };
@@ -301,7 +330,7 @@ Lapiz.Module("Collections", function($L){
         val = newVal;
       }
     };
-    Object.defineProperty(obj, name, desc);
+    Map.prop(obj, name, desc);
   });
 
   // > Lapiz.Map.copyProps(copyTo, copyFrom, props...)
@@ -382,11 +411,11 @@ Lapiz.Module("Collections", function($L){
     var self = $L.Map();
     self.namespace = $L.Map();
 
-    Map.meth(self, function set(name, value){Object.defineProperty(self.namespace, name, { value: value });});
-    Map.meth(self, function prop(name, desc){Object.defineProperty(self.namespace, name, desc);});
-    Map.meth(self, function meth(fn){Map.meth(self.namespace, fn);});
-    Map.meth(self, function setterMethod(fn){Map.setterMethod(self.namespace, fn);});
-    Map.meth(self, function getter(fn){Map.getter(self.namespace, fn);});
+    Map.meth(self, function set(name, value){Map.prop(self.namespace, name, { value: value });});
+    Map.meth(self, function prop(name, desc){Map.prop(self.namespace, name, desc);});
+    Map.meth(self, function meth(name, fn){Map.meth(self.namespace, name, fn);});
+    Map.meth(self, function setterMethod(name, fn){Map.setterMethod(self.namespace, name, fn);});
+    Map.meth(self, function getter(name, fn){Map.getter(self.namespace, name, fn);});
     Map.meth(self, function setterGetter(name, setter, getter){Map.setterGetter(self.namespace, name, setter, getter);});
 
     if ($L.typeCheck.func(fn)){
@@ -1536,6 +1565,23 @@ Lapiz.Module("Objects", ["Events"], function($L){
     // > lapizClass.on.create
     // Registration for event that will fire everytime a new instance is created
     $L.Event.linkProperty(ret.on, "create", newInstanceEvent);
+
+    // > lapizClass.StaticSet(name, value)
+    $L.Map.meth(ret, function StaticSet(name, value){$L.Map.prop(ret, name, { value: value });});
+    // > lapizClass.StaticProp(name, desc)
+    $L.Map.meth(ret, function StaticProp(name, desc){$L.Map.prop(ret, name, desc);});
+    // > lapizClass.StaticMeth(name, fn)
+    // > lapizClass.StaticMeth(namedFunc)
+    $L.Map.meth(ret, function StaticMethod(name, fn){$L.Map.meth(ret, name, fn);});
+    // > lapizClass.StaticSetterMethod(name, fn)
+    // > lapizClass.StaticSetterMethod(namedFunc)
+    $L.Map.meth(ret, function StaticSetterMethod(name, fn){$L.Map.setterMethod(ret, name, fn);});
+    // > lapizClass.StaticGetter(name, fn)
+    // > lapizClass.StaticGetter(nameeFunc)
+    $L.Map.meth(ret, function StaticGetter(name, fn){$L.Map.getter(ret, name, fn);});
+    // > lapizClass.StaticSetterGetter(name, setter)
+    // > lapizClass.StaticSetterGetter(name, setter, getter)
+    $L.Map.meth(ret, function StaticSetterGetter(name, setter, getter){$L.Map.setterGetter(ret, name, setter, getter);});
 
     _newClassEvent.fire(ret);
     return ret;
