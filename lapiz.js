@@ -1025,7 +1025,7 @@ Lapiz.Module("Filter", function($L){
       var l = _index.length;
       for(i=0; i<l; i+=1){
         key = _index[i];
-        if (fn(key, accessor(key))) { break; }
+        if (fn(accessor(key), key)) { break; }
       }
     });
 
