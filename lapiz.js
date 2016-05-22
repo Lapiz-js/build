@@ -143,6 +143,13 @@ var Lapiz = (function ModuleLoaderModule($L){
   // will throw err if obj is not an number.
   $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err)});
 
+  // > Lapiz.typeCheck.obj(obj)
+  // > Lapiz.typeCheck.obj(obj, err)
+  // Checks if the object is an object. If a string is supplied for err, it
+  // will throw err if obj is not an number. Note that many things like Arrays and
+  // Dates are objects, but numbers strings and functions are not.
+  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err)});
+
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunctionName)
   // Checks that each nested field exists and that the last field matches the function type.
@@ -1246,9 +1253,29 @@ Lapiz.Module("Index", function($L){
       }
       return _primary(idFuncOrAttr);
     };
+
+    return cls;
+  });
+
+  // > Lapiz.Index.Class(constructor, primaryFunc, domain)
+  // Shorthand helper, constructor for an indexed class.
+  $L.Map.meth($L.Index, function Class(constructor, primaryFunc, domain){
+    return Lapiz.Index(Lapiz.Class(constructor), primaryFunc, domain);
   });
 });
+// The private fields on Lapiz Objects are intentionally attributes not
+// properties so that they can be rearranged if necessary.
 Lapiz.Module("Objects", ["Events"], function($L){
+
+  $L.Map.meth($L, function tis(self, fn){
+    $L.typeCheck.func(fn, "Lapiz.tis requires function as second argument");
+    var wrapped = function(){
+      return fn.apply(self, arguments);
+    };
+    $L.set(wrapped, "name", fn.name);
+    return wrapped;
+  });
+
   function _getter(self, funcOrProp){
     if ($L.typeCheck.func(funcOrProp)) { return funcOrProp; }
     if ($L.typeCheck.string(funcOrProp)) { return function(){ return self.attr[funcOrProp]; }; }
@@ -1256,8 +1283,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
 
   function _setter(self, field, func){
     if ($L.typeCheck.string(func)){
-      $L.assert($L.parse[func] !== undefined, "Lapiz.parse does not have field "+func);
-      func = $L.parse[func];
+      func = $L.parse(func);
     }
     return function(){
       //todo: add test for fireChange and event
@@ -1462,10 +1488,43 @@ Lapiz.Module("Objects", ["Events"], function($L){
     };
 
     // > lapizObject.getter(getterFn)
+    // > lapizObject.getter(name, getterFn)
+    // > lapizObject.getter([getterFn, ..., getterFn])
+    // > lapizObject.getter([{name: getterFn}, ..., {name: getterFn}])
     // Creates a getter property in the public namespace.
-    self.getter = function(getterFn){
-      $L.Map.getter(self.pub, getterFn);
+    self.getter = function(name, getterFn){
+      if ($L.typeCheck.func(name)){
+        getterFn = name;
+        name = name.name;
+      } else if (getterFn === undefined){
+        if ($L.typeCheck.string(name)){
+          getterFn = function(){ return self.attr[name]; };
+        } else if ($L.typeCheck.array(name)){
+          return $L.each(name, function(getter){
+            self.getter(getter);
+          });
+        } else if ($L.typeCheck.obj(name)) {
+          return $L.each(name, function(getter, name){
+            self.getter(name, getter);
+          });
+        } 
+      }
+      $L.typeCheck.string(name, "Bad call to Lapiz.Object.getter: could not resolve string for name");
+      $L.typeCheck.func(getterFn, "Bad call to Lapiz.Object.getter: could not resolve function for getter");
+      $L.Map.getter(self.pub, name, getterFn);
     };
+
+    // > lapizObject.getterAttr(name, parserFn, val)
+    // > lapizObject.getterAttr(name, parserStr, val)
+    // Creates a read only attribute and sets it value to val after using the 
+    // parser
+    self.getterAttr = function(name, parser, val){
+      $L.typeCheck.string(name, "getterAttr requires name arg as a string");
+      self.attr[name] = $L.parse(parser, val);
+      $L.Map.getter(self.pub, name, function(){
+        return self.attr[name];
+      });
+    }
 
     // > lapizObject.meth(fn)
     // Creates a method in the public namespace.
@@ -1553,7 +1612,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
     } else {
       ret = function(){
         var self = Lapiz.Object();
-        self = fn.apply(self, arguments) || self;
+        self = fn.apply(self, arguments) || self.pub;
         newInstanceEvent.fire(self);
         return self;
       };
@@ -1596,11 +1655,43 @@ Lapiz.Module("Parser", function($L){
     return parser;
   }
 
-  // > Lapiz.parse
-  // Namespace for parser methods. This namespace is left open
-  // so that it can be extended, particularly for use with defining
-  // object properties.
-  $L.set($L, "parse", $L.Map());
+  // > Lapiz.parse()
+  // Namespace for parser methods and a function to concisely invoke them
+  // > Lapiz.parse("int") === Lapiz.parse.int
+  // Which can be useful to take 
+  // > Lapiz.parse("array|int")
+  // or
+  // > Lapiz.parse("array|int")
+  $L.Map.meth($L, function parse(){
+    var parser;
+    var args = Array.prototype.slice.call(arguments, 0);
+    $L.assert(args.length > 0, "Lapiz.parse requires at least one arg");
+    var parseStrs = args.shift();
+    if (Lapiz.typeCheck.func(parseStrs)){
+      parser = parseStrs;
+      // Lapiz.parse(parserFn) => parserFn
+      return parseStrs;
+    } else if ($L.typeCheck.string(parseStrs)){
+      // something like "int" or "array|int"
+      // so we work backwards
+      parseStrs = parseStrs.split("|");
+      var parserName = parseStrs.pop();
+      $L.typeCheck.func(Lapiz.parse[parserName], "Lapiz.parse."+parserName+" is not a parser");
+      parser = Lapiz.parse[parserName];
+      while(parseStrs.length > 0){
+        parserName = parseStrs.pop();
+        $L.typeCheck.func(Lapiz.parse[parserName], "Lapiz.parse."+parserName+" is not a parser");
+        parser = Lapiz.parse[parserName].call(this, parser);
+      }
+    } else {
+      throw new Error("Lapiz.parse requires first arg as either string or function");
+    }
+
+    if (args.length>0){
+      return parser.apply(this, args);
+    }
+    return parser;
+  });
 
   // > Lapiz.parse.int(val)
   // > Lapiz.parse.int(val, rad)
