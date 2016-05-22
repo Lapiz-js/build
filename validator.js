@@ -1,14 +1,24 @@
 Lapiz.Module("Validator", ["Collections"], function($L){
-  $L.Validator = function(validation, data, formatFunc){
-    var validator = function(data, formatFunc){
+
+  // > Lapiz.Validator(validationRules)
+  // > Lapiz.Validator(validationRules, data)
+  // > Lapiz.Validator(validationRules, data, formatFunc)
+  // If only validationRules are given, a validator function is returned.
+  // If data is given, the validation rules are run against the data.
+  /* >
+    var personValidator = Lapiz.Validator({
+      "id" : "required"
+    });
+  */
+  $L.Map.meth($L, function Validator(validationRules, data, formatFunc){
+    function validator(data, formatFunc){
       formatFunc = formatFunc || $L.Validator.format.array;
-      var errs = {};
+      var errs = $L.Map();
       var errBool = false;
-      Lapiz.each(validation, function(validator, key){
+      Lapiz.each(validationRules, function(validator, name){
         validator = validator.split("|");
-        var val = data[key];
-        var name = validator.shift();
-        errs[key] = [];
+        var val = data[name];
+        errs[name] = [];
         Lapiz.each(validator, function(validator){
           args = validator.split(":");
           var vName = args.shift();
@@ -17,7 +27,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
           var out = validator(name, val, args, data);
           errBool = errBool || !!out;
           if (out) {
-            errs[key].push(out);
+            errs[name].push(out);
           }
         });
       });
@@ -29,7 +39,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
       return validator(data, formatFunc);
     }
     return validator;
-  };
+  });
 
   $L.Map.meth($L.Validator, function required(name, val){
     if (val === "" || val === undefined){
@@ -106,6 +116,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
   $L.Validator.format.array = function(errs, errBool){
     return errBool ? errs : false;
   };
+
   $L.Validator.format.divs = function(errs, errBool){
     if (!errBool){ return false; }
     var errDivs = document.createDocumentFragment();
@@ -117,10 +128,25 @@ Lapiz.Module("Validator", ["Collections"], function($L){
     });
     return errDivs;
   };
-  $L.Validator.format.li = function(errs){
-    return "<li>" + errs.join("</li><li>") + "</li>";
+
+  $L.Validator.format.li = function(errs, errBool){
+    if (!errBool){ return false; }
+    var errLis = document.createDocumentFragment();
+    $L.each(errs, function(v, k){
+      var li = document.createElement("li");
+      li.attributes['for'] = k;
+      li.textContent = v;
+      errLis.appendChild(li);
+    });
+    return errLis;
   };
-  $L.Validator.format.ul = function(errs){
-    return "<ul>" + Validator.li(errs) + "</ul>";
+
+  $L.Validator.format.ul = function(errs, errBool){
+    if (!errBool){ return false; }
+    var ul = document.createElement("ul");
+    ul.appendChild($L.Validator.format.li(errs, errBool));
+    var df = document.createDocumentFragment();
+    df.appendChild(ul);
+    return df;
   };
 });
