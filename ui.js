@@ -65,7 +65,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // Returns an html Node that is a clone of the View.
   ui.meth(function CloneView(name){
     if (_views[name] === undefined){
-      throw new Error("View "+name+" is not defined");
+      $L.Err.throw("View "+name+" is not defined");
     }
     return _views[name].cloneNode(true);
   });
@@ -115,10 +115,10 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // > Lapiz.UI.mediator(mediators)
   ui.meth(function mediator(mediatorName, fn){
     if (typeof mediatorName !== "string"){
-      throw new Error("Mediator name must be a string");
+      $L.Err.throw("Mediator name must be a string");
     }
     if (_mediators[mediatorName] !== undefined){
-      throw new Error("Attempting to redefine "+mediatorName+" mediator");
+      $L.Err.throw("Attempting to redefine "+mediatorName+" mediator");
     }
     var properties = $L.Map();
     _mediators[mediatorName] = {
@@ -136,7 +136,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
         return;
       }
       if (typeof propName !== "string"){
-        throw new Error("Mediator property name on "+mediatorName+" must be a string, got: "+(typeof propName));
+        $L.Err.throw("Mediator property name on "+mediatorName+" must be a string, got: "+(typeof propName));
       }
       properties[propName] = prop;
     };
@@ -376,7 +376,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
         }
         if (rend.target === null){
           test = view;
-          throw new Error("Query selector could not match "+rend.selector);
+          $L.Err.throw("Query selector could not match "+rend.selector);
         }
         rend.view = $L.UI.CloneView(rend.view);
         $L.UI.bind(rend.view, ctx, Lapiz.Template.Std.templator);
@@ -550,35 +550,35 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     // > <htmlNode click="$ctxFn">...</htmlNode>
     // The given function will be called with the node is clicked.
     "click": function(node, _, fn){
-      if (typeof(fn) !== "function") { throw new Error("Expected function"); }
+      if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
       node.addEventListener("click", fn);
     },
     // > attribute:display
     // > <htmlNode display="$ctxFn">...</htmlNode>
     // The given function will be called with the node is first displayed.
     "display": function(node, ctx, fn){
-      if (typeof(fn) !== "function") { throw "Expected function"; }
+      if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
       fn(node,ctx);
     },
     // > attribute:blur
     // > <htmlNode blur="$ctxFn">...</htmlNode>
     // The given function will be called with the node loses focus.
     "blur": function(node, _, fn){
-      if (typeof(fn) !== "function") { throw "Expected function"; }
+      if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
       node.addEventListener("blur", fn);
     },
     // > attribute:submit
     // > <htmlNode submit="$ctxFn">...</htmlNode>
     // The given function will be called when the submit event fires.
     "submit": function(node, _, fn){
-      if (typeof(fn) !== "function") { throw "Expected function"; }
+      if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
       node.addEventListener("submit", fn);
     },
     // > attribute:change
     // > <htmlNode submit="$ctxFn">...</htmlNode>
     // The given function will be called when the change event fires.
     "change": function(node, _, fn){
-      if (typeof(fn) !== "function") { throw "Expected function"; }
+      if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
       node.addEventListener("change", fn);
     }
   });
@@ -637,7 +637,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   UI.hash = function(hash, fn, ctx){
     var args = Array.prototype.slice.call(arguments);
     if (args.length === 0){
-      throw new Error("Hash requires at least one arg");
+      $L.Err.throw("Hash requires at least one arg");
     }
     var hash = args.splice(0,1)[0];
     var fn = args[0];
@@ -733,7 +733,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
           view = viewOrGenerator.view;
           viewCtx = (viewOrGenerator.ctx === undefined) ? viewCtx : viewOrGenerator.ctx;
         }
-        throw new Error("An invalid view was given or generated");
+        $L.Err.throw("An invalid view was given or generated");
       }
       UI.render(view, viewCtx);
     };
