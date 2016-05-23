@@ -237,24 +237,23 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       }
     }
 
-    
-    // if the parentNode is null, this node has been removed from it's parent
-    // document and we don't need to parse it's children.
-    if (node.tagName && node.tagName.toUpperCase() === "RENDER"){
-      // > render
-      // > <render name="viewName"></render>
-      // Inserts a sub view. Contents of render will be wiped.
-      attrName = node.attributes.getNamedItem('name').value;
-      i = $L.UI.CloneView(attrName);
-      if (node.parentNode !== null){
-        node.parentNode.insertBefore(i, node.nextSibling);
-        $L.UI.bindState.parent.next = node.nextSibling;
-      }
-      node.remove();
-    } else if (node.nodeType === 1 || node.nodeType === 11){
-      for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
-        $L.UI.bindState.next = cur.nextSibling
-        $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
+    if ($L.UI.bindState.proceed){
+      if (node.tagName && node.tagName.toUpperCase() === "RENDER"){
+        // > render
+        // > <render name="viewName"></render>
+        // Inserts a sub view. Contents of render will be wiped.
+        attrName = node.attributes.getNamedItem('name').value;
+        i = $L.UI.CloneView(attrName);
+        if (node.parentNode !== null){
+          node.parentNode.insertBefore(i, node.nextSibling);
+          $L.UI.bindState.parent.next = node.nextSibling;
+        }
+        node.remove();
+      } else if (node.nodeType === 1 || node.nodeType === 11){
+        for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
+          $L.UI.bindState.next = cur.nextSibling
+          $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
+        }
       }
     }
 
@@ -520,7 +519,8 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
       }
     }
 
-    node.parentNode.removeChild(node);
+    //node.parentNode.removeChild(node);
+    node.remove();
     UI.bindState.proceed = false;
   }); //End Repeat attribute
 
@@ -602,7 +602,10 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     return data;
   }
 
-  // > mediator:form
+  // > Lapiz.UI.mediator
+  // Mediators are a way to attach generic logic to a view.
+
+  // > Lapiz.UI.mediator.form
   /* >
     <form>
       ...
@@ -673,7 +676,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     if (_hash[hash] !== undefined){ _hash[hash].apply(this, args); }
   });
 
-  // > Lapiz.UI.mediator.viewMethod
+  // > Lapiz.UI.mediator.viewMethod(viewMethodName, func(node, ctx, args...))
   // Useful mediator for attaching generic methods available to views.
   UI.mediator("viewMethod", function viewMethod(node, ctx, methd){
     //Todo:
@@ -681,7 +684,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     // - get name from function
     return function innerViewMethod(){
       var args = Array.prototype.slice.call(arguments); // get args
-      args.splice(0,0, node, ctx); // prepend node and ctx
+      args.splice(0,0, node, ctx); // prepend original node and ctx
       return methd.apply(this, args);
     };
   });
