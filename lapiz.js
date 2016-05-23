@@ -1669,8 +1669,6 @@ Lapiz.Module("Parser", function($L){
     var parseStrs = args.shift();
     if (Lapiz.typeCheck.func(parseStrs)){
       parser = parseStrs;
-      // Lapiz.parse(parserFn) => parserFn
-      return parseStrs;
     } else if ($L.typeCheck.string(parseStrs)){
       // something like "int" or "array|int"
       // so we work backwards
