@@ -1732,8 +1732,20 @@ Lapiz.Module("Parser", function($L){
   });
 
   // > Lapiz.parse.bool(val)
+  // Converts val to a bool. Takes into account a few special edge cases, "O"
+  // and "false" (any case) are cast to false.
+  $L.Map.meth($L.parse, function bool(val){
+    if ($L.typeCheck.string(val) && (val === "0" || val.toLowerCase() === "false")){
+      return false;
+    }
+    return !!val;
+  });
+
+  // > Lapiz.parse.strictBool(val)
   // Converts val to a bool
-  $L.Map.meth($L.parse, function bool(val){ return !!val; });
+  $L.Map.meth($L.parse, function strictBool(val){
+    return !!val;
+  });
 
   // > Lapiz.parse.number(val)
   // Converts val to a number. This is a wrapper around parseFloat.
