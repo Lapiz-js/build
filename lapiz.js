@@ -130,7 +130,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // > Lapiz.typeCheck.func(obj, err)
   // Checks if the object is a function. If a string is supplied for err, it
   // will throw err if obj is not a function.
-  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, Function, err, true)});
+  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, "function", err, true)});
 
   // > Lapiz.typeCheck.array(obj)
   // > Lapiz.typeCheck.array(obj, err)
