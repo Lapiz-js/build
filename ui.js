@@ -46,13 +46,20 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       var name = node.attributes["name"].value;
       $L.assert(name !== "", "Got l-view tag without name");
       _views[name] = df;
+      // this seems odd; here's the logic. node.children does not return
+      // text nodes, we iterate using this for loop. If we were to use
+      // df.appendChild(cur), it would move cur and the nextSibling would
+      // always be null, so we have to clone it.
       var cur;
       for(cur = node.firstChild; cur !== null; cur = cur.nextSibling){
-        df.appendChild(cur);
+        df.appendChild(cur.cloneNode(true));
       }
       node.remove();
     });
   }
+  ui.meth(function test(){
+    return _views["baz"];
+  });
 
   // > Lapiz.UI.CloneView(name)
   // Returns an html Node that is a clone of the View.
@@ -230,16 +237,22 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       }
     }
 
-    if (node.nodeType === 1 || node.nodeType === 11){
+    
+    // if the parentNode is null, this node has been removed from it's parent
+    // document and we don't need to parse it's children.
+    if (node.tagName && node.tagName.toUpperCase() === "RENDER"){
+      // > render
+      // > <render name="viewName"></render>
+      // Inserts a sub view. Contents of render will be wiped.
+      attrName = node.attributes.getNamedItem('name').value;
+      i = $L.UI.CloneView(attrName);
+      if (node.parentNode !== null){
+        node.parentNode.insertBefore(i, node.nextSibling);
+        $L.UI.bindState.parent.next = node.nextSibling;
+      }
+      node.remove();
+    } else if (node.nodeType === 1 || node.nodeType === 11){
       for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
-        if (cur.tagName && cur.tagName.toUpperCase() === "RENDER"){
-          attrName = cur.attributes.getNamedItem('name').value;
-          i = $L.UI.CloneView(attrName);
-          cur.parentNode.insertBefore(i, cur.nextSibling);
-          i = cur.nextSibling;
-          cur.remove();
-          cur = i;
-        }
         $L.UI.bindState.next = cur.nextSibling
         $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
       }
