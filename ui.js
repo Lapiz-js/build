@@ -232,6 +232,14 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 
     if (node.nodeType === 1 || node.nodeType === 11){
       for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
+        if (cur.tagName && cur.tagName.toUpperCase() === "RENDER"){
+          attrName = cur.attributes.getNamedItem('name').value;
+          i = $L.UI.CloneView(attrName);
+          cur.parentNode.insertBefore(i, cur.nextSibling);
+          i = cur.nextSibling;
+          cur.remove();
+          cur = i;
+        }
         $L.UI.bindState.next = cur.nextSibling
         $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
       }
