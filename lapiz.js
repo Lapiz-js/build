@@ -111,10 +111,17 @@ var Lapiz = (function ModuleLoaderModule($L){
   Lapiz.typeCheck("test", Array); // false
   Lapiz.typeCheck([], "string", "Expected string"); // throws an error
   */
-  $L.set($L, "typeCheck", function(obj, type, err){
+  $L.set($L, "typeCheck", function(obj, type, err, twoLayers){
     var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
     if (err !== undefined && !typeCheck){
-      throw new Error(err);
+      err = new Error(err);
+      // peel one or two layer off the stack because it iwll always be
+      // this line, or if two lines, the type check helper
+      err.stack = err.stack.split("\n");
+      err.stack.shift();
+      if (twoLayers){err.stack.shift();}
+      err.stack = err.stack.join("\n");
+      throw err;
     }
     return typeCheck;
   });
@@ -123,32 +130,32 @@ var Lapiz = (function ModuleLoaderModule($L){
   // > Lapiz.typeCheck.func(obj, err)
   // Checks if the object is a function. If a string is supplied for err, it
   // will throw err if obj is not a function.
-  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, Function, err)});
+  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, Function, err, true)});
 
   // > Lapiz.typeCheck.array(obj)
   // > Lapiz.typeCheck.array(obj, err)
   // Checks if the object is a array. If a string is supplied for err, it
   // will throw err if obj is not an array.
-  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err)});
+  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err, true)});
 
   // > Lapiz.typeCheck.string(obj)
   // > Lapiz.typeCheck.string(obj, err)
   // Checks if the object is a string. If a string is supplied for err, it
   // will throw err if obj is not an string.
-  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err)});
+  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err, true)});
 
   // > Lapiz.typeCheck.number(obj)
   // > Lapiz.typeCheck.number(obj, err)
   // Checks if the object is a number. If a string is supplied for err, it
   // will throw err if obj is not an number.
-  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err)});
+  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err, true)});
 
   // > Lapiz.typeCheck.obj(obj)
   // > Lapiz.typeCheck.obj(obj, err)
   // Checks if the object is an object. If a string is supplied for err, it
   // will throw err if obj is not an number. Note that many things like Arrays and
   // Dates are objects, but numbers strings and functions are not.
-  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err)});
+  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err, true)});
 
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunctionName)
@@ -172,7 +179,13 @@ var Lapiz = (function ModuleLoaderModule($L){
   // If bool evaluates to false, an error is thrown with err.
   $L.set($L, "assert", function(bool, err){
     if (!bool){
-      throw new Error(err);
+      err = new Error(err);
+      // peel one layer off the stack because it iwll always be
+      // this line
+      err.stack = err.stack.split("\n");
+      err.stack.shift();
+      err.stack = err.stack.join("\n");
+      throw err;
     }
   });
 
@@ -201,7 +214,7 @@ Lapiz.Module("Collections", function($L){
   */
   $L.set(Map, "meth", function(obj, name, fn){
     if (name === undefined && $L.typeCheck.func(obj)){
-      throw new Error("Meth called without object: "+obj.name);
+      $L.Err.throw("Meth called without object: "+obj.name);
     }
     if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
       $L.assert(name !=="", "Meth name cannot be empty string");
@@ -209,7 +222,7 @@ Lapiz.Module("Collections", function($L){
       fn = name;
       name = fn.name;
     } else {
-      throw new Error("Meth requires either name and func or named function");
+      Lapiz.Err.throw("Meth requires either name and func or named function");
     }
     $L.set(obj, name, fn);
   });
@@ -232,7 +245,7 @@ Lapiz.Module("Collections", function($L){
   */
   Map.meth(Map, function setterMethod(obj, name, fn){
     if (name === undefined && $L.typeCheck.func(obj)){
-      throw new Error("SetterMethod called without object: "+obj.name);
+      Lapiz.Err.throw("SetterMethod called without object: "+obj.name);
     }
     if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
       $L.assert(name !=="", "SetterMethod name cannot be empty string");
@@ -240,7 +253,7 @@ Lapiz.Module("Collections", function($L){
       fn = name;
       name = fn.name;
     } else {
-      throw new Error("SetterMethod requires either name and func or named function");
+      Lapiz.Err.throw("SetterMethod requires either name and func or named function");
     }
     Map.prop(obj, name, {
       "get": function(){ return fn; },
@@ -270,7 +283,7 @@ Lapiz.Module("Collections", function($L){
   */
   Map.meth(Map, function getter(obj, name, fn){
     if (name === undefined && $L.typeCheck.func(obj)){
-      throw new Error("Getter called without object: "+obj.name);
+      Lapiz.Err.throw("Getter called without object: "+obj.name);
     }
     if ($L.typeCheck.func(fn) && $L.typeCheck.string(name)){
       $L.assert(name !=="", "Getter name cannot be empty string");
@@ -278,30 +291,28 @@ Lapiz.Module("Collections", function($L){
       fn = name;
       name = fn.name;
     } else {
-      throw new Error("Getter requires either name and func or named function");
+      Lapiz.Err.throw("Getter requires either name and func or named function");
     }
     Map.prop(obj, name, {"get": fn,} );
   });
 
-  // > Lapiz.Map.setterGetter(obj, name, setterFunc, getterFunc)
-  // > Lapiz.Map.setterGetter(obj, name, setterFunc)
+  // > Lapiz.Map.setterGetter(obj, name, val, setterFunc, getterFunc)
+  // > Lapiz.Map.setterGetter(obj, name, val, setterFunc)
   // Creates a setter/getter property via a closure. A setter function is
   // required, if no getter is provided, the value will be returned. This is the
   // reason the method is named setterGetter rather than the more traditional
   // arrangement of "getterSetter" because the arguments are arranged so that
-  // the first 3 are required and the last is optional.
+  // the first 4 are required and the last is optional.
   /* >
   var x = Lapiz.Map();
-  Lapiz.Map.setterGetter(x, "foo", function(i){return parseInt(i);});
-
-  x.foo = "12";
+  Lapiz.Map.setterGetter(x, "foo", 12, function(i){return parseInt(i);});
   console.log(x.foo); // will log 12 as an int
   */
   // The value 'this' is always set to a special setterInterface for the setter
   // method. This can be used to cancel the set operation;
   /* >
   var x = Lapiz.Map();
-  Lapiz.Map.setterGetter(x, "foo", function(i){
+  Lapiz.Map.setterGetter(x, "foo", 0, function(i){
     i = parseInt(i);
     this.set = !isNaN(i);
     return i;
@@ -313,12 +324,11 @@ Lapiz.Module("Collections", function($L){
   console.log(x.foo); // value will still be 12
 
   */
-  Map.meth(Map, function setterGetter(obj, name, setter, getter){
+  Map.meth(Map, function setterGetter(obj, name, val, setter, getter){
     if ($L.typeCheck.string(setter)){
-      setter = $L.parse[setter];
+      setter = $L.parse(setter);
     }
-    $L.typeCheck.func(setter, "Expected function or string reference to parser for setterGetter (argument 3)");
-    var val;
+    $L.typeCheck.func(setter, "Expected function or string reference to parser for setterGetter (argument 4)");
     var desc = {};
     if (getter === undefined){
       desc.get = function(){ return val; };
@@ -412,8 +422,8 @@ Lapiz.Module("Collections", function($L){
   // * namespace.meth(namedFunc)
   // * namespace.setterMethod(namedSetterFunc)
   // * namespace.getter(namedGetterFunc)
-  // * namespace.setterGetter(name, setter, getter)
-  // * namespace.setterGetter(name, setter)
+  // * namespace.setterGetter(name, val, setter, getter)
+  // * namespace.setterGetter(name, val, setter)
   Map.meth($L, function Namespace(fn){
     var self = $L.Map();
     self.namespace = $L.Map();
@@ -423,7 +433,7 @@ Lapiz.Module("Collections", function($L){
     Map.meth(self, function meth(name, fn){Map.meth(self.namespace, name, fn);});
     Map.meth(self, function setterMethod(name, fn){Map.setterMethod(self.namespace, name, fn);});
     Map.meth(self, function getter(name, fn){Map.getter(self.namespace, name, fn);});
-    Map.meth(self, function setterGetter(name, setter, getter){Map.setterGetter(self.namespace, name, setter, getter);});
+    Map.meth(self, function setterGetter(name, val, setter, getter){Map.setterGetter(self.namespace, name, val, setter, getter);});
 
     if ($L.typeCheck.func(fn)){
       fn.apply(self);
@@ -525,7 +535,7 @@ Lapiz.Module("Dependency", function($L){
   // Returns the dependency associated with name
   $L.Dependency = function(name){
     var d = _dependencies[name];
-    if (d === undefined) { throw new Error("Cannot find Dependency " + name); }
+    if (d === undefined) { Lapiz.Err.throw("Cannot find Dependency " + name); }
     return d();
   };
 
@@ -814,7 +824,52 @@ Lapiz.Module("Dictionary", function($L){
     return accessor.Accessor;
   });
 });
-Lapiz.Module("Events", ["Collections"], function($L){
+Lapiz.Module("Errors", ["Events"], function($L){
+
+  $L.set($L, "Err", $L.Map());
+
+  var errEvent = $L.Event.linkProperty($L.on, "error");
+
+  $L.set($L.Err, "throw", function(err){
+    if ($L.typeCheck.string(err)){
+      err = new Error(err);
+      // peel one layer off the stack because it iwll always be
+      // this line
+      err.stack = err.stack.split("\n");
+      err.stack.shift();
+      err.stack = err.stack.join("\n");
+    }
+    errEvent.fire(err);
+    throw err;
+  });
+
+  function logError(err){
+    $L.Err.logTo.log(err.message);
+    $L.Err.logTo.log(err.stack);
+  }
+
+  var _loggingEnabled = false;
+  var _nullLogger = $L.Map();
+  $L.Map.meth(_nullLogger, function log(){});
+  Object.freeze(_nullLogger);
+  $L.Map.setterGetter($L.Err, "logTo", _nullLogger, function(newVal, oldVal){
+    if (newVal === null || newVal === undefined){
+      newVal = _nullLogger;
+      if (_loggingEnabled) {
+        _loggingEnabled = false;
+        $L.on.error.deregister(logError);
+      }
+    } else {
+      $L.typeCheck.func(newVal.log, "Object passed to Lapiz.Err.logTo must have .log method");
+      if (!_loggingEnabled) {
+        _loggingEnabled = true;
+        $L.on.error(logError);
+      }
+    }
+    return newVal;
+  });
+
+});Lapiz.Module("Events", ["Collections"], function($L){
 
   // > Lapiz.Event()
   /* >
@@ -874,8 +929,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     // The event.enabled is a boolean that can be set to enable or disable the
     // fire method. If event.fire.enable is false, even if event.fire is called,
     // it will not call the registered functions.
-    $L.Map.setterGetter(event.fire, "enabled", function(enable){ return !!enable; });
-    event.fire.enabled = true;
+    $L.Map.setterGetter(event.fire, "enabled", true, function(enable){ return !!enable; });
 
     // > event.fire.length
     // The event.length is a read-only property that returns the number of
@@ -956,7 +1010,7 @@ Lapiz.Module("Events", ["Collections"], function($L){
     return evt;
   });
 
-  $L.on = $L.Map();
+  $L.set($L, "on", $L.Map());
 });
 Lapiz.Module("Filter", function($L){
 
@@ -1184,7 +1238,7 @@ Lapiz.Module("Index", function($L){
         };
       }(primaryFunc);
     } else if ( !(primaryFunc instanceof  Function) ){
-      throw new Error("Expected a function or string");
+      Lapiz.Err.throw("Expected a function or string");
     }
 
     if (domain === undefined) {
@@ -1467,7 +1521,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
         desc = {};
 
         if (val === undefined || val === null){
-          throw new Error("Invalid value for '" + property + "'");
+          Lapiz.Err.throw("Invalid value for '" + property + "'");
         } else if ($L.typeCheck.func(val)|| $L.typeCheck.string(val)){
           desc.set = _setter(self, property, val);
           desc.get = _getter(self, property);
@@ -1477,7 +1531,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
           }
           desc.get = (val.get !== undefined) ? _getter(self, val.get) : _getter(self, property);
         } else {
-          throw new Error("Could not construct getter/setter for " + val);
+          Lapiz.Err.throw("Could not construct getter/setter for " + val);
         }
 
         Object.defineProperty(self.pub, property, desc);
@@ -1605,7 +1659,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
     if (customObj){
       ret = function(){
         var obj = fn.apply(this, arguments);
-        if (obj === undefined) {throw new Error("Constructor did not return an object");}
+        if (obj === undefined) {Lapiz.Err.throw("Constructor did not return an object");}
         newInstanceEvent.fire(obj);
         return obj;
       };
@@ -1639,9 +1693,9 @@ Lapiz.Module("Objects", ["Events"], function($L){
     // > lapizClass.StaticGetter(name, fn)
     // > lapizClass.StaticGetter(nameeFunc)
     $L.Map.meth(ret, function StaticGetter(name, fn){$L.Map.getter(ret, name, fn);});
-    // > lapizClass.StaticSetterGetter(name, setter)
-    // > lapizClass.StaticSetterGetter(name, setter, getter)
-    $L.Map.meth(ret, function StaticSetterGetter(name, setter, getter){$L.Map.setterGetter(ret, name, setter, getter);});
+    // > lapizClass.StaticSetterGetter(name, val, setter)
+    // > lapizClass.StaticSetterGetter(name, val, setter, getter)
+    $L.Map.meth(ret, function StaticSetterGetter(name, val, setter, getter){$L.Map.setterGetter(ret, name, val, setter, getter);});
 
     _newClassEvent.fire(ret);
     return ret;
@@ -1682,7 +1736,7 @@ Lapiz.Module("Parser", function($L){
         parser = Lapiz.parse[parserName].call(this, parser);
       }
     } else {
-      throw new Error("Lapiz.parse requires first arg as either string or function");
+      Lapiz.Err.throw("Lapiz.parse requires first arg as either string or function");
     }
 
     if (args.length>0){
@@ -1692,19 +1746,17 @@ Lapiz.Module("Parser", function($L){
   });
 
   // > Lapiz.parse.int(val)
-  // > Lapiz.parse.int(val, rad)
-  // If rad is not defined it will default to 10. This is mostly a wrapper
+  // Always parses in base 10. This is mostly a wrapper
   // around parseInt, however if val is a boolean it will reurn eitehr 1
   // or 0.
-  $L.set($L.parse, "int", function(val,rad){
+  $L.set($L.parse, "int", function(val){
     //can't use $L.Map.meth because "int" is reserve word
     if (val === true){
       return 1;
     } else if (val === false){
       return 0;
     }
-    rad = rad || 10;
-    return parseInt(val, rad);
+    return parseInt(val, 10);
   });
 
   // > Lapiz.parse.string
@@ -1840,7 +1892,7 @@ Lapiz.Module("Sorter", function($L){
           return (a > b ? 1 : (b > a ? -1 : 0));
         };
       } else {
-        throw new Error("Sorter function must be omitted, function or field name");
+        Lapiz.Err.throw("Sorter function must be omitted, function or field name");
       }
     }
     setSortFn(funcOrField);
