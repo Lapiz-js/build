@@ -428,7 +428,9 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
         rend.target.appendChild(rend.view);
       }
     }
-    if (!append){ target.innerHTML = "";}
+    if (!append){
+      $L.UI.empty(target);
+    }
     target.appendChild(view);
   });
 
@@ -436,6 +438,19 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // > Lapiz.UI.id(elId, doc)
   ui.meth(function id(elId, doc){
     return (doc || document).getElementById(elId);
+  });
+
+  // > Lapiz.UI.empty(node)
+  // > Lapiz.UI.empty(nodeId)
+  ui.meth(function empty(node){
+    if ($L.typeCheck.string(node)){
+      node = document.getElementById(node);
+    }
+    $L.typeCheck(node, Node, "Lapiz.UI.empty requires either node or node ID");
+    while (node.firstChild) {
+      node.removeChild(target.firstChild);
+    }
+    return node;
   });
 
   // > attribute:resolver
