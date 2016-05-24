@@ -5,6 +5,9 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // Namespace for the UI methods.
   $L.set($L, "UI", ui.namespace);
 
+  // _getProperties uses a weakMap to track node properties. This make clean up
+  // easier and helps prevent memory leaks, when a node is garbage collected,
+  // the properties will be cleaned up too.
   var _nodeProp = new WeakMap();
   function _getProperties(node){
     var _props = _nodeProp.get(node);
@@ -16,20 +19,28 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   }
 
   var _views = $L.Map();
+  
+  // > attribute
+  // An HTML attribute
+
+  // > tag
+  // An html tag
+
 
   // _viewAttribute is the attribute that will be used to identify views
   // it is treated as a constant and is only here for DRY
   var _viewAttribute = 'l-view';
-  // > l-view
-  // Used to create a lapiz view:
+  // > attribute:l-view
   // > <htmlNode l-view="viewName">...</htmlNode>
+  // Used to create a lapiz view:
   // All nodes in the document with this attribute will be cloned and saved and
   // the original will be removed from the document.
-  //
+  
+  // > tag:l-view
+  // > <l-view name="viewName">...</l-view>
   // Any node with the l-view tag will also be cloned as a view, but only the
   // children will be cloned, the node itself will be ommited. The node must
   // have a name attribute
-  // > <l-view name="viewName">...</l-view>
 
   // _loadViews is automatically invoked. It removes any node with the l-view
   // attribute and saves it as a view
@@ -46,14 +57,9 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       var name = node.attributes["name"].value;
       $L.assert(name !== "", "Got l-view tag without name");
       _views[name] = df;
-      // this seems odd; here's the logic. node.children does not return
-      // text nodes, we iterate using this for loop. If we were to use
-      // df.appendChild(cur), it would move cur and the nextSibling would
-      // always be null, so we have to clone it.
-      var cur;
-      for(cur = node.firstChild; cur !== null; cur = cur.nextSibling){
-        df.appendChild(cur.cloneNode(true));
-      }
+      $L.each($L.UI.Children(node), function(child){
+        df.appendChild(child);
+      });
       node.remove();
     });
   }
@@ -70,6 +76,23 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     return _views[name].cloneNode(true);
   });
 
+  // > Lapiz.UI.Children(node)
+  // > Lapiz.UI.Children(id)
+  // Gets all the children of the node as an array, including textnodes, which
+  // the built-in node.children will leave out.
+  ui.meth(function Children(node){
+    if ($L.typeCheck.string(node)){
+      node = document.getElementById(node);
+    }
+    $L.typeCheck(node, Node, "Children requires node or node id");
+    var children = [];
+    var child;
+    for(child = node.firstChild; child !== null; child = child.nextSibling){
+      children.push(child);
+    }
+    return children;
+  });
+
   // > Lapiz.UI.View(name, viewStr)
   // Adds a view that can be rendered or cloned.
   ui.meth(function View(name, viewStr){
@@ -83,8 +106,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 
   var _attributes = $L.Map();
   var _attributeOrder = [];
-  // > Lapiz.UI.attribute(name, fn)
-  // > Lapiz.UI.attribute(name, fn, before)
+  // > Lapiz.UI.attribute(name, fn(node, ctx, attrVal) )
+  // > Lapiz.UI.attribute(name, fn(node, ctx, attrVal), before)
   // > Lapiz.UI.attribute(attributes)
   ui.meth(function attribute(name, fn, before){
     if (fn === undefined){
@@ -164,6 +187,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     return keys;
   }
 
+  // searches up the node tree for a property
   function _inherit(node, property){
     var _props;
     for(;node !== null; node=node.parentNode){
@@ -175,37 +199,55 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   }
 
   // > Lapiz.UI.bind(node, ctx, templator)
+  // Binds a context and node together using the templator. If no templator is
+  // given, it will inheir a templator from it's parent, if no parent is present
+  // it will use the standard templator Generally, it is better to call
+  // Lapiz.UI.render than Lapiz.UI.bind.
   ui.meth(function bind(node, ctx, templator){
     var cur, i, attrName, attrVal, _props;
     if (node.nodeName.toLowerCase() === "script") { return; }
     var _after = [];
 
+    // > Lapiz.UI.bindState
+    // The bind state helps coordinate binding a template and a context. It is
+    // available to the attributes during the binding process so they can direct
+    // aspects of the bind process.
     if ($L.UI.bindState === undefined){
       $L.UI.bindState = $L.Map();
     } else {
       i = $L.Map();
+      // > Lapiz.UI.bindState.parent
+      // The bindstate of the parent node.
       i.parent = $L.UI.bindState;
       $L.UI.bindState = i;
     }
-    $L.UI.bindState.proceed = true;
-    $L.UI.bindState.after = function(fn){
+    // > Lapiz.UI.bindState.proceed
+    // If an attribute set this to false, no further attributes will be bound
+    // and the child nodes will not be processed. This is useful if an attribute
+    // is removing a node.
+    $L.Map.setterGetter($L.UI.bindState, "proceed", true, "bool");
+
+    // > Lapiz.UI.bindState.after(fn);
+    // Adds a function that will be called after all attributes and child nodes
+    // have been handled.
+    $L.Map.setterMethod($L.UI.bindState, function after(fn){
       _after.push(fn);
-    };
+    });
 
     _props = _getProperties(node);
-    if (ctx === undefined){
-      ctx = _inherit(node, 'ctx');
-    } else {
-      _props['ctx'] = ctx;
-    }
+    ctx = (ctx === undefined) ? _inherit(node, 'ctx') : ctx;
+    _props['ctx'] = ctx;
+
     if (templator === undefined){
       templator = _inherit(node, 'templator');
       if (templator === undefined){
         templator = $L.Template.Std.templator;
       }
-    } else {
-      _props['templator'] = templator;
     }
+    _props['templator'] = templator;
+
+    // > Lapiz.UI.bindState.templator
+    // The templator that will be used
     $L.UI.bindState.templator = templator;
 
 
@@ -239,7 +281,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 
     if ($L.UI.bindState.proceed){
       if (node.tagName && node.tagName.toUpperCase() === "RENDER"){
-        // > render
+        // > tag:render
         // > <render name="viewName"></render>
         // Inserts a sub view. Contents of render will be wiped.
         attrName = node.attributes.getNamedItem('name').value;
@@ -363,6 +405,9 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       rend = _splitRenderString(arguments[i]);
       if (i===0){
         target = document.querySelector(rend.selector);
+        if (target === null){
+          $L.Err.throw("Got null when selecting: "+rend.selector)
+        }
         append = rend.append;
         view = document.createDocumentFragment();
         view.appendChild(Lapiz.UI.CloneView(rend.view));
@@ -394,9 +439,13 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   });
 
   // > attribute:resolver
+  // > <tag resolver="$resolver">...</tag>
+  // Takes the current tokenizer and the tokenizer assigned and creates a new
+  // templator that will be used on all attributes processed after this and all
+  // child nodes. By default, resolver is the first attribute evaluated.
   $L.UI.attribute("resolver", function(node, ctx, resolver){
     var _props = _getProperties(node);
-    var templator = $L.Template.Templator($L.Template.Std.tokenizer, resolver);
+    var templator = $L.Template.Templator($L.UI.bindState.templator.tokenizer, resolver);
     _props["templator"] = templator;
     $L.UI.bindState.templator = templator;
   });

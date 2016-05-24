@@ -60,9 +60,12 @@ Lapiz.Module("Template", ["Collections"], function($L){
   // which will take a template and a context and return
   // their product.
   self.meth(function Templator(tokenizer, resolver){
-    return function(template, ctx){
+    function tpltr(template, ctx){
       return tokenizer(template, ctx, resolver);
     };
+    $L.set(tpltr, "resolver", resolver);
+    $L.set(tpltr, "tokenizer", tokenizer);
+    return tpltr;
   });
 
   // > Lapiz.Template.Std.templator(template, ctx)
