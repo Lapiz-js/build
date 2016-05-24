@@ -277,6 +277,8 @@ Lapiz.Module("Collections", function($L){
 
   // > Lapiz.Map.getter(object, namedGetterFunc() )
   // > Lapiz.Map.getter(object, name, getterFunc() )
+  // > Lapiz.Map.getter(object, [namedGetterFuncs...] )
+  // > Lapiz.Map.getter(object, {name: getterFunc...} )
   // Attaches a getter method to an object. The method must be a named function.
   /* >
   var x = Lapiz.Map();
@@ -298,6 +300,16 @@ Lapiz.Module("Collections", function($L){
     } else if ($L.typeCheck.func(name) && name.name !== ""){
       fn = name;
       name = fn.name;
+    } else if ($L.typeCheck.array(name)){
+      $L.each(name, function(getterFn){
+        Map.getter(obj, getterFn);
+      });
+      return;
+    } else if ($L.typeCheck.obj(name)){
+      $L.each(name, function(getterFn, name){
+        Map.getter(obj, name, getterFn);
+      });
+      return;
     } else {
       Lapiz.Err.throw("Getter requires either name and func or named function");
     }
