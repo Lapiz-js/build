@@ -79,7 +79,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // > Lapiz.UI.Children(node)
   // > Lapiz.UI.Children(id)
   // Gets all the children of the node as an array, including textnodes, which
-  // the built-in node.children will leave out.
+  // the built-in node.children will leave out. Node can also be a document
+  // fragment.
   ui.meth(function Children(node){
     if ($L.typeCheck.string(node)){
       node = document.getElementById(node);
@@ -323,6 +324,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 
   var _init = false;
   var _initEvent = $L.SingleEvent();
+  // > Lapiz.UI.on.loaded(fn())
+  // > Lapiz.UI.on.loaded = fn()
   $L.Event.linkProperty(_eventNamespace.namespace, "loaded", _initEvent);
 
   document.addEventListener("DOMContentLoaded", function(){
@@ -448,7 +451,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     }
     $L.typeCheck(node, Node, "Lapiz.UI.empty requires either node or node ID");
     while (node.firstChild) {
-      node.removeChild(target.firstChild);
+      node.removeChild(node.firstChild);
     }
     return node;
   });

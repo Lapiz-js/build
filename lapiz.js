@@ -121,7 +121,11 @@ var Lapiz = (function ModuleLoaderModule($L){
       err.stack.shift();
       if (twoLayers){err.stack.shift();}
       err.stack = err.stack.join("\n");
-      throw err;
+      if ($L.Err && $L.Err.throw){
+        $L.Err.throw(err);
+      } else {
+        throw err;
+      }
     }
     return typeCheck;
   });
@@ -185,7 +189,11 @@ var Lapiz = (function ModuleLoaderModule($L){
       err.stack = err.stack.split("\n");
       err.stack.shift();
       err.stack = err.stack.join("\n");
-      throw err;
+      if ($L.Err && $L.Err.throw){
+        $L.Err.throw(err);
+      } else {
+        throw err;
+      }
     }
   });
 
