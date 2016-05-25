@@ -788,6 +788,10 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   });
 
   // > attribute:view
+  // Renders a view. By default uses the current ctx.
+  // > <tag click="view.foo">Foo</tag>
+  //
+  // > Lapiz.UI.mediator.view("foo", "foo > #main");
   UI.mediator("view", function(node, ctx, viewOrGenerator){
     return function(){
       var view;
@@ -815,6 +819,8 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   });
 
   // > attribute:selectVal
+  // For a select box, it checks all the child select options and if it finds
+  // one who's value property matches val, it sets it to selected.
   UI.attribute("selectVal", function(node, ctx, val){
     node.removeAttribute("selectVal");
     val = $L.parse.string(val);
@@ -827,5 +833,15 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
         }
       });
     });
+  });
+
+  // > attribute:focus
+  // Causes this element to recieve focus when a view is rendered
+  UI.attribute("focus", function(node, ctx, val){
+    // I'm not thrilled with this solution, but I haven't been able to find
+    // anything better.
+    setTimeout(function(){
+      node.focus();
+    }, 10);
   });
 });

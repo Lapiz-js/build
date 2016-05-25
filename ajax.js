@@ -64,7 +64,6 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
     });
     if (headers !== undefined){
       $L.each(headers, function(val, key){
-        console.log(key, val);
         x.setRequestHeader(key, val);
       });
     }
