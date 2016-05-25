@@ -58,15 +58,16 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
       }
     }
     x.onreadystatechange = _rsChng(x, callback);
+    x.open(type, url, true);
     $L.each(_headers, function(val, key){
       x.setRequestHeader(key, val);
     });
     if (headers !== undefined){
       $L.each(headers, function(val, key){
+        console.log(key, val);
         x.setRequestHeader(key, val);
       });
     }
-    x.open(type, url, true);
     x.send(rawData);
     return x;
   }
@@ -85,7 +86,21 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
       callback = data;
       data = undefined;
     }
-    return request("POST", url, data, undefined, callback, headers);
+
+    if (data === undefined){
+      data = "";
+    } else if (!$L.typeCheck.string(data)){
+      data = _encodeData(data);
+    }
+
+    if (headers === undefined){
+      headers = $L.Map();
+    }
+    headers["Content-type"] = "application/x-www-form-urlencoded";
+    headers["Content-length"] = data.length;
+    headers["Connection"] = "close";
+
+    return request("POST", url, undefined, data, callback, headers);
   });
 
   self.meth(function json(url, data, callback, headers){
