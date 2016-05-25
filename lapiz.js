@@ -1807,7 +1807,12 @@ Lapiz.Module("Parser", function($L){
     if (val === undefined || val === null) { return ""; }
     var type = typeof(val);
     if (type === "string") { return val; }
-    if (type === "number") { return ""+val; }
+    if (type === "number") {
+      if (isNaN(val)){
+        return "";
+      }
+      return ""+val;
+    }
     var strFromMethod;
     if ($L.typeCheck.nested(val, "str", "func")) {
       strFromMethod = val.str();
