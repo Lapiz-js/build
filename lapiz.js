@@ -1619,8 +1619,8 @@ Lapiz.Module("Objects", ["Events"], function($L){
 
     // > lapizObject.meth(fn)
     // Creates a method in the public namespace.
-    self.meth = function(fn){
-      $L.Map.meth(self.pub, fn);
+    self.meth = function(name, fn){
+      $L.Map.meth(self.pub, name, fn);
     };
 
     if ($L.typeCheck.func(constructor)){
