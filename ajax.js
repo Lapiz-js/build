@@ -37,8 +37,8 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
     return function(){
       _readystatechange.fire(x);
       if (x.readyState === 4){
-        _status[Math.floor(x.status/100)].fire(x)
-        if (x.status === 200){
+        _status[Math.floor(x.status/100)].fire(x);
+        if (x.status === 200 && $L.typeCheck.func(callback)){
           callback(x);
         }
       }
@@ -57,9 +57,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
         url += _encodeData(urlData);
       }
     }
-    if ($L.typeCheck.func(callback)){
-      x.onreadystatechange = _rsChng(x, callback);
-    }
+    x.onreadystatechange = _rsChng(x, callback);
     $L.each(_headers, function(val, key){
       x.setRequestHeader(key, val);
     });
