@@ -9,30 +9,54 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
   var y_pos = 0;
   var _noSelectS = ["WebkitUserSelect", "MozUserSelect", "MsUserSelect", "userSelect"];
   var _saveSelect = $L.Map();
+  var _timer;
+  var body;
 
-  function _drag_init(e){
-    var props = _dragProps.get(this);
-    if (props.clone === true){
-      _selected = this.cloneNode(true);
-      this.parentNode.insertBefore(_selected, this.nextSibling);
-      _selected.style.opacity = "0.7";
-      _dragProps.set(_selected, props);
-      props['z'] = undefined;
-    } else {
-      _selected = this;
-      props['z'] = $L.UI.getStyle(this, "z-index");
-    }
-    _selected.style.zIndex = _highestZIndex+2;
-    _selected.style.position = "absolute";
+  function _drag_pre_init(e){
     x_elem = e.offsetX;
     y_elem = e.offsetY;
-    document.addEventListener("mousemove", _move_elem);
-    document.addEventListener("mouseup", _drag_stop);
-    var body = document.querySelector("body");
+    _selected = this;
+    document.addEventListener("mouseup", _cancel_drag);
+    _timer = setTimeout(_drag_init, 150);
+    _disable_highlight()
+  }
+
+  function _cancel_drag(){
+    clearTimeout(_timer);
+    document.removeEventListener("mouseup", _cancel_drag);
+    _enable_highlight();
+  }
+
+  function _disable_highlight(){
     $L.each(_noSelectS, function(key){
       _saveSelect[key] = body.style[key];
       body.style[key] = "none";
     });
+  }
+
+  function _enable_highlight(){
+    $L.each(_noSelectS, function(key){
+      body.style[key] = _saveSelect[key];
+    });
+  }
+
+  function _drag_init(){
+    var self = _selected;
+    document.removeEventListener("mouseup", _cancel_drag);
+    var props = _dragProps.get(self);
+    if (props.clone === true){
+      _selected = self.cloneNode(true);
+      self.parentNode.insertBefore(_selected, self.nextSibling);
+      _selected.style.opacity = "0.7";
+      _dragProps.set(_selected, props);
+      props['z'] = undefined;
+    } else {
+      props['z'] = $L.UI.getStyle(self, "z-index");
+    }
+    _selected.style.zIndex = _highestZIndex+2;
+    _selected.style.position = "absolute";
+    document.addEventListener("mousemove", _move_elem);
+    document.addEventListener("mouseup", _drag_stop);
   };
 
   function _move_elem(e){
@@ -65,9 +89,7 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
     document.removeEventListener("mousemove", _move_elem);
     document.removeEventListener("mouseup", _drag_stop);
     var body = document.querySelector("body");
-    $L.each(_noSelectS, function(key){
-      body.style[key] = _saveSelect[key];
-    });
+    _enable_highlight();
     _selected.style.zIndex = _highestZIndex+1;
     if (props.clone === true){
       _selected.remove();
@@ -86,6 +108,7 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
   }
 
   Lapiz.UI.attribute("draggable", function(node, ctx, attrVal){
+    body = body || document.querySelector("body");
     _highestZIndex = _highestZIndex || _findHighestZIndex(document);
     attrVal = _getAttr(attrVal);
     var props = $L.Map();
@@ -93,7 +116,7 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
     props.ctx = ctx;
     _dragProps.set(node, props);
     node.style.position = "relative";
-    node.addEventListener("mousedown", _drag_init);
+    node.addEventListener("mousedown", _drag_pre_init);
   });
 
   Lapiz.UI.attribute("droppable", function(node, ctx, dropFunc){
