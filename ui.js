@@ -236,8 +236,11 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     });
 
     _props = _getProperties(node);
-    ctx = (ctx === undefined) ? _inherit(node, 'ctx') : ctx;
-    _props['ctx'] = ctx;
+
+    // > Lapiz.UI.bindState.ctx
+    // Initially, this is set to the ctx that is resolved for the binding
+    // operationg. If it is changed by attribute, that will become the context
+    $L.UI.bindState.ctx = (ctx === undefined) ? _inherit(node, 'ctx') : ctx;
 
     if (templator === undefined){
       templator = _inherit(node, 'templator');
@@ -245,18 +248,17 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
         templator = $L.Template.Std.templator;
       }
     }
-    _props['templator'] = templator;
 
     // > Lapiz.UI.bindState.templator
     // The templator that will be used
     $L.UI.bindState.templator = templator;
 
 
-    if (node.nodeType === 3){ //TextNode
+    if (node.nodeType === 3){ // TextNode
       if (_props["template"] === undefined){
         _props["template"] = node.textContent;
       }
-      node.textContent = templator(_props["template"], ctx);
+      node.textContent = $L.UI.bindState.templator(_props["template"], $L.UI.bindState.ctx);
     }
     if (node.nodeType === 1){ //Element node
       var attrTemplates = _props['attrTemplates'];
@@ -270,9 +272,9 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
         if (attrTemplates[attrName] === undefined){
           attrTemplates[attrName] = node.attributes[attrName].value;
         }
-        attrVal = _getAttributeValue(attrTemplates[attrName], ctx, node, $L.UI.bindState.templator);
+        attrVal = _getAttributeValue(attrTemplates[attrName], $L.UI.bindState.ctx, node, $L.UI.bindState.templator);
         if (_attributes[attrName] !== undefined){
-          _attributes[attrName](node, ctx, attrVal);
+          _attributes[attrName](node, $L.UI.bindState.ctx, attrVal);
         } else {
           node.attributes[attrName].value = attrVal;
         }
@@ -295,13 +297,15 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
       } else if (node.nodeType === 1 || node.nodeType === 11){
         for(cur = node.firstChild; cur !== null; cur = $L.UI.bindState.next){
           $L.UI.bindState.next = cur.nextSibling
-          $L.UI.bind(cur, ctx, $L.UI.bindState.templator);
+          $L.UI.bind(cur, $L.UI.bindState.ctx, $L.UI.bindState.templator);
         }
       }
     }
 
     $L.each(_after, function(fn){fn();});
 
+    _props['ctx'] = $L.UI.bindState.ctx;
+    _props['templator'] = $L.UI.bindState.templator;
     $L.UI.bindState = $L.UI.bindState.parent;
   });
 
@@ -471,6 +475,10 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
 });
 Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   var UI = $L.UI;
+
+  $L.UI.attribute("with", function(node, oldCtx, newCtx){
+    $L.UI.bindState.ctx = newCtx;
+  });
 
   // > attribute:if
   // > <htmlNode if="$ctxVal">...</htmlNode>
