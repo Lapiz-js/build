@@ -27,9 +27,18 @@ var Lapiz = (function ModuleLoaderModule($L){
     return notLoaded;
   };
 
+  function _safeThrow(err, peelLayers){
+    err.stack = err.stack.split("\n");
+    err.stack.splice(0,peelLayers+1); // peel one additional layer for _safeThrow
+    err.stack = err.stack.join("\n");
+    ($L.Err && $L.Err.throw) && $L.Err.throw(err);
+    throw err; // this line will not be reached if $L.Err.throw was called
+  }
+
   // > Lapiz.set(obj, name, value)
+  // > Lapiz.set(obj, namedFunction)
   // Defines a fixed propery on an object. Properties defined this way cannot be
-  // overridden.
+  // overridden. Attempting to set them will throw an error.
   /* >
   var x = {};
   x.foo = function(){...};
@@ -40,10 +49,29 @@ var Lapiz = (function ModuleLoaderModule($L){
   Lapiz.set(y, "foo", function{...});
   y.foo = 12; // this will not override the method
   */
+
+  // *, str, *                     => named prop
+  // *, namedFn, undefined         => namedFn
+  // str, str, undefined           => probably forgot obj, intended named prop
+  // namedFn, undefined, undefined => probably forgot obj, intended namedFn
   function set(obj, name, value){
-    Object.defineProperty(obj, name, { value: value });
+    var getFn;
+    if (value === undefined && typeof name === "function" && name.name !== ""){
+      // name is a named function
+      value = name;
+      name = value.name;
+    }
+
+    (typeof name === "string") || _safeThrow("Attempting to call Lapiz.set without name");
+    (value !== undefined)      || _safeThrow("Attempting to call Lapiz.set without value");
+    var setErr = "Attempting to set read-only property "+name;
+    Object.defineProperty(obj, name, {
+      "get": function(){ return value; },
+      "set": function(){ _safeThrow(new Error(setErr), 1); },
+    });
   }
-  set($L, "set", set);
+  set($L, set);
+  set($L, "_cls", $L);
 
   function _updatePending(name){
     var i, pending, idx;
@@ -100,10 +128,10 @@ var Lapiz = (function ModuleLoaderModule($L){
   Object.freeze(self.Module);
 
   // > Lapiz.typeCheck(obj, type)
-  // > Lapiz.typeCheck(obj, type, err)
+  // > Lapiz.typeCheck(obj, type, errStr)
   // Checks if the type of obj matches type. If type is a string, typeof will be
   // used, if type is a class, instanceof will be used. To throw an error when
-  // the types do not match, specify err as a string. Other wise, typeCheck will
+  // the types do not match, specify errStr as a string. Other wise, typeCheck will
   // return a boolean indicating if the types matched.
   /* >
   Lapiz.typeCheck([], Array); // true
@@ -111,55 +139,44 @@ var Lapiz = (function ModuleLoaderModule($L){
   Lapiz.typeCheck("test", Array); // false
   Lapiz.typeCheck([], "string", "Expected string"); // throws an error
   */
-  $L.set($L, "typeCheck", function(obj, type, err, twoLayers){
+  $L.set($L, "typeCheck", function(obj, type, err, peelLayers){
     var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
     if (err !== undefined && !typeCheck){
-      err = new Error(err);
-      // peel one or two layer off the stack because it iwll always be
-      // this line, or if two lines, the type check helper
-      err.stack = err.stack.split("\n");
-      err.stack.shift();
-      if (twoLayers){err.stack.shift();}
-      err.stack = err.stack.join("\n");
-      if ($L.Err && $L.Err.throw){
-        $L.Err.throw(err);
-      } else {
-        throw err;
-      }
+      _safeThrow(new Error(err), peelLayers || 1);
     }
     return typeCheck;
   });
 
   // > Lapiz.typeCheck.func(obj)
-  // > Lapiz.typeCheck.func(obj, err)
-  // Checks if the object is a function. If a string is supplied for err, it
-  // will throw err if obj is not a function.
-  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, "function", err, true)});
+  // > Lapiz.typeCheck.func(obj, errStr)
+  // Checks if the object is a function. If a string is supplied for errStr, it
+  // will throw errStr if obj is not a function.
+  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, "function", err, 2)});
 
   // > Lapiz.typeCheck.array(obj)
-  // > Lapiz.typeCheck.array(obj, err)
-  // Checks if the object is a array. If a string is supplied for err, it
-  // will throw err if obj is not an array.
-  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err, true)});
+  // > Lapiz.typeCheck.array(obj, errStr)
+  // Checks if the object is a array. If a string is supplied for errStr, it
+  // will throw errStr if obj is not an array.
+  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err, 2)});
 
   // > Lapiz.typeCheck.string(obj)
-  // > Lapiz.typeCheck.string(obj, err)
-  // Checks if the object is a string. If a string is supplied for err, it
-  // will throw err if obj is not an string.
-  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err, true)});
+  // > Lapiz.typeCheck.string(obj, errStr)
+  // Checks if the object is a string. If a string is supplied for errStr, it
+  // will throw errStr if obj is not an string.
+  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err, 2)});
 
   // > Lapiz.typeCheck.number(obj)
-  // > Lapiz.typeCheck.number(obj, err)
-  // Checks if the object is a number. If a string is supplied for err, it
-  // will throw err if obj is not an number.
-  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err, true)});
+  // > Lapiz.typeCheck.number(obj, errStr)
+  // Checks if the object is a number. If a string is supplied for errStr, it
+  // will throw errStr if obj is not an number.
+  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err, 2)});
 
   // > Lapiz.typeCheck.obj(obj)
-  // > Lapiz.typeCheck.obj(obj, err)
-  // Checks if the object is an object. If a string is supplied for err, it
-  // will throw err if obj is not an number. Note that many things like Arrays and
+  // > Lapiz.typeCheck.obj(obj, errStr)
+  // Checks if the object is an object. If a string is supplied for errStr, it
+  // will throw errStr if obj is not an number. Note that many things like Arrays and
   // Dates are objects, but numbers strings and functions are not.
-  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err, true)});
+  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err, 2)});
 
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunctionName)
@@ -1067,7 +1084,7 @@ Lapiz.Module("Filter", function($L){
 
     // > filter._cls
     // Return Lapiz.Filter
-    $L.set($L, "_cls", $L.Filter);
+    $L.set(self, "_cls", $L.Filter);
 
     // if filterOrField is a string, and val is set, create a function
     // to check that field against the val

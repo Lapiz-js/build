@@ -1,4 +1,4 @@
-Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
+Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L){
   
   var ui = $L.Namespace();
   // > Lapiz.UI
@@ -77,13 +77,13 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   });
 
   // > Lapiz.UI.Children(node)
-  // > Lapiz.UI.Children(id)
+  // > Lapiz.UI.Children(selectorStr)
   // Gets all the children of the node as an array, including textnodes, which
   // the built-in node.children will leave out. Node can also be a document
-  // fragment.
+  // fragment. If a selectorStr is used, it will be run against document.
   ui.meth(function Children(node){
     if ($L.typeCheck.string(node)){
-      node = document.getElementById(node);
+      node = document.querySelector(node);
     }
     $L.typeCheck(node, Node, "Children requires node or node id");
     var children = [];
@@ -111,12 +111,19 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   // > Lapiz.UI.attribute(name, fn(node, ctx, attrVal), before)
   // > Lapiz.UI.attribute(attributes)
   ui.meth(function attribute(name, fn, before){
-    if (fn === undefined){
-      //define plural
-      $L.each(name, function(fn, name){
-        Lapiz.UI.attribute(name, fn);
-      });
-      return;
+    if (fn === undefined || $L.typeCheck.string(fn)){
+      if ($L.typeCheck.func(name)){
+        $L.assert(name.name !== "", "Using a function as the first arg to Lapiz.UI.attribute requires a named function");
+        before = fn;
+        fn = name;
+        name = fn.name;
+      } else {
+        //define plural
+        $L.each(name, function(fn, name){
+          Lapiz.UI.attribute(name, fn);
+        });
+        return;
+      }
     }
     $L.typeCheck.string(name, "Attribute name must be a string");
     $L.typeCheck.func(fn, "Second arg to attribute must be a function");
@@ -137,13 +144,37 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   var _mediators = $L.Map();
   // > Lapiz.UI.mediator(mediatorName,fn)
   // > Lapiz.UI.mediator(mediators)
+  // Mediators are a pattern to provide reusable code. Mediators can only be
+  // used as an attribute value and always follow the pattern of two words
+  // seperated by a period, or more exactly:
+  // > /^(\w+)\.(\w+)$/
+  // Abstractly, if we have
+  // > <N A="M.F">...</N>
+  // and
+  // > Lapiz.UI.attribute(A, fn_A);
+  // > Lapiz.UI.mediator(M, fn_M);
+  // > Lapiz.UI.mediator.M(F, val_F);
+  // > Lapiz.UI.render("view > target", C); //view includes the segmetn above
+  // Then we will invoke the follwing logic:
+  // > fn_A(N, C, fn_M(N, C, val_F));
+  //
+  // A good example of the usefulness of this pattern is the form mediator.
+  // > Lapiz.UI.mediator.form(formHandlerName, formHandlerFunction(formData));
+  // The form mediator abstracts away the logic of pulling the values from named
+  // elements within the form into a key/value Map so that the
+  // formHandlreFunction can focus on what should be done with the data. It
+  // produces clean html:
+  // > <form submit="form.newPerson">...</form>
+  //
+  // > Lapiz.UI.mediator.form("newPerson", function(newPersonData){...});
   ui.meth(function mediator(mediatorName, fn){
-    if (typeof mediatorName !== "string"){
-      $L.Err.throw("Mediator name must be a string");
+    if ($L.typeCheck.func(mediatorName)){
+      $L.assert(mediatorName.name !== "", "If first argument to Lapiz.UI.mediator is a funciton, it must be named");
+      fn = mediatorName;
+      mediatorName = fn.name;
     }
-    if (_mediators[mediatorName] !== undefined){
-      $L.Err.throw("Attempting to redefine "+mediatorName+" mediator");
-    }
+    $L.typeCheck.string(mediatorName, "Mediator name must be a string");
+    $L.assert(_mediators[mediatorName] === undefined, "Attempting to redefine "+mediatorName+" mediator");
     var properties = $L.Map();
     _mediators[mediatorName] = {
       handler: fn,
@@ -151,20 +182,27 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     };
     // > Lapiz.UI.mediator.mediatorName(propertyName, property)
     // > Lapiz.UI.mediator.mediatorName(properties)
+    // Defines a mediator property. If 
     var registerFn = function(propName, prop){
       if (prop === undefined){
-        //defining many with an array
-        Lapiz.each(propName, function(val, key){
-          properties[key] = val;
-        });
-        return;
+        if ($L.typeCheck.func(propName) && propName.name !== ""){
+          // named function
+          prop = propName;
+          propName = prop.name;
+        } else {
+          //defining many with an array
+          Lapiz.each(propName, function(val, key){
+            properties[key] = val;
+          });
+          return;
+        }
       }
       if (typeof propName !== "string"){
         $L.Err.throw("Mediator property name on "+mediatorName+" must be a string, got: "+(typeof propName));
       }
       properties[propName] = prop;
     };
-    Object.defineProperty(Lapiz.UI.mediator, mediatorName, {value: registerFn});
+    $L.set($L.UI.mediator, mediatorName, registerFn);
   });
 
   // _attributeSorter is used to sort the order that attributes are processed
@@ -312,12 +350,15 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
   var _mediatorRe = /^(\w+)\.(\w+)$/;
   function _getAttributeValue(str, ctx, node, templator){
     var mediatorPattern = _mediatorRe.exec(str);
-    var mediator;
+    var mediator, mediatorFn;
     if (mediatorPattern) {
       mediator = _mediators[mediatorPattern[1]];
       if (mediator) {
         //TODO catch if mediatorPattern[2] is not in properties
-        return mediator.handler(node, ctx, mediator.properties[mediatorPattern[2]]);
+        
+        if ($L.Map.has(mediator.properties, mediatorPattern[2])) {
+          return mediator.handler(node, ctx, mediator.properties[mediatorPattern[2]]);
+        }
       }
     }
     return templator(str, ctx);
@@ -360,6 +401,8 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     }
   }
 
+  // > Lapiz.UI.on.remove(node, fn)
+  // When the document is removed, fn will be called.
   function remove(node, fn){
     var _props = _getProperties(node);
     if (_props['onRemove'] === undefined) {
@@ -472,6 +515,24 @@ Lapiz.Module("UI", ["Collections", "Events", "Template"], function($L){
     $L.UI.bindState.templator = templator;
   });
 
+  // > Lapiz.UI.getStyle(node, property)
+  // > Lapiz.UI.getStyle(selectorString, property)
+  // > Lapiz.UI.getStyle(nodeOrStr, property, doc)
+  // > Lapiz.UI.getStyle(nodeOrStr, property, doc, docView)
+  // > Lapiz.UI.getStyle(nodeOrStr, property, doc, docView, pseudoElt)
+  // Returns the computed style for the node. If a string is passed in for node
+  // the node will be found with doc.querySelector. For defaults, doc will
+  // document, docView will be 'defaultView' and pseudoElt will be null.
+  ui.meth(function getStyle(node, property, doc, docView, pseudoElt){
+    doc = doc || document;
+    docView = docView || 'defaultView';
+    pseudoElt = pseudoElt || null;
+    if ($L.typeCheck.string(node)){
+      node = doc.querySelector(node);
+    }
+    $L.typeCheck(node, Node, "First argument to Lapiz.UI.getStyle must be node or valid selector string");
+    return doc[docView].getComputedStyle(node, pseudoElt).getPropertyValue(property);
+  })
 });
 Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   var UI = $L.UI;
@@ -669,7 +730,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   function _getFormValues (form) {
     var nameQuery = form.querySelectorAll("[name]");
     var i, n;
-    var data = {};
+    var data = $L.Map();
     for(i=nameQuery.length-1; i>=0; i-=1){
       n = nameQuery[i];
       data[ n.name ] = n.value;
@@ -687,17 +748,17 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
       <button click="form.formHandler">Go!</button>
     </form>
   */
-  // > Lapiz.UI.mediator.form("formHandler", fn(formData));
+  // > Lapiz.UI.mediator.form("formHandler", fn(formData, formNode, ctx));
   // The form mediator will search up the node tree until it finds
   // a form node. All elements with a name will be added to the
   // formData.
-  UI.mediator("form", function(node, _, fn){
+  UI.mediator("form", function(node, ctx, fn){
     var form;
     return function(evt){
       if (form === undefined){
         form = _getForm(node);
       }
-      if (!fn(_getFormValues(form)) && evt && evt.preventDefault){
+      if (!fn(_getFormValues(form), form, ctx) && evt && evt.preventDefault){
         evt.preventDefault();
       }
     };
@@ -754,6 +815,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   // > Lapiz.UI.mediator.viewMethod(viewMethodName, func(node, ctx, args...))
   // Useful mediator for attaching generic methods available to views.
   UI.mediator("viewMethod", function viewMethod(node, ctx, methd){
+    $L.typeCheck.func(methd, "Mediator viewMethod expects a function");
     //Todo:
     // - accept multiple view methods
     // - get name from function
