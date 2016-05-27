@@ -27,14 +27,6 @@ var Lapiz = (function ModuleLoaderModule($L){
     return notLoaded;
   };
 
-  function _safeThrow(err, peelLayers){
-    err.stack = err.stack.split("\n");
-    err.stack.splice(0,peelLayers+1); // peel one additional layer for _safeThrow
-    err.stack = err.stack.join("\n");
-    ($L.Err && $L.Err.throw) && $L.Err.throw(err);
-    throw err; // this line will not be reached if $L.Err.throw was called
-  }
-
   // > Lapiz.set(obj, name, value)
   // > Lapiz.set(obj, namedFunction)
   // Defines a fixed propery on an object. Properties defined this way cannot be
@@ -62,12 +54,12 @@ var Lapiz = (function ModuleLoaderModule($L){
       name = value.name;
     }
 
-    (typeof name === "string") || _safeThrow("Attempting to call Lapiz.set without name");
-    (value !== undefined)      || _safeThrow("Attempting to call Lapiz.set without value");
+    if (typeof name !== "string"){ throw new Error("Attempting to call Lapiz.set without name"); }
+    if (value === undefined){throw new Error("Attempting to call Lapiz.set without value"); }
     var setErr = "Attempting to set read-only property "+name;
     Object.defineProperty(obj, name, {
       "get": function(){ return value; },
-      "set": function(){ _safeThrow(new Error(setErr), 1); },
+      "set": function(){ throw new Error(setErr); },
     });
   }
   set($L, set);
@@ -142,7 +134,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   $L.set($L, "typeCheck", function(obj, type, err, peelLayers){
     var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
     if (err !== undefined && !typeCheck){
-      _safeThrow(new Error(err), peelLayers || 1);
+      throw new Error(err);
     }
     return typeCheck;
   });
@@ -151,32 +143,62 @@ var Lapiz = (function ModuleLoaderModule($L){
   // > Lapiz.typeCheck.func(obj, errStr)
   // Checks if the object is a function. If a string is supplied for errStr, it
   // will throw errStr if obj is not a function.
-  $L.set($L.typeCheck, "func", function(obj, err){return $L.typeCheck(obj, "function", err, 2)});
+  $L.set($L.typeCheck, "func", function(obj, err){
+    var typeCheck = $L.typeCheck(obj, "function");
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
 
   // > Lapiz.typeCheck.array(obj)
   // > Lapiz.typeCheck.array(obj, errStr)
   // Checks if the object is a array. If a string is supplied for errStr, it
   // will throw errStr if obj is not an array.
-  $L.set($L.typeCheck, "array", function(obj, err){return $L.typeCheck(obj, Array, err, 2)});
+  $L.set($L.typeCheck, "array", function(obj, err){
+    var typeCheck = $L.typeCheck(obj, Array);
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
 
   // > Lapiz.typeCheck.string(obj)
   // > Lapiz.typeCheck.string(obj, errStr)
   // Checks if the object is a string. If a string is supplied for errStr, it
   // will throw errStr if obj is not an string.
-  $L.set($L.typeCheck, "string", function(obj, err){return $L.typeCheck(obj, "string", err, 2)});
+  $L.set($L.typeCheck, "string", function(obj, err){
+    var typeCheck = $L.typeCheck(obj, "string");
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
 
   // > Lapiz.typeCheck.number(obj)
   // > Lapiz.typeCheck.number(obj, errStr)
   // Checks if the object is a number. If a string is supplied for errStr, it
   // will throw errStr if obj is not an number.
-  $L.set($L.typeCheck, "number", function(obj, err){return $L.typeCheck(obj, "number", err, 2)});
+  $L.set($L.typeCheck, "number", function(obj, err){
+    var typeCheck = $L.typeCheck(obj, "number");
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
 
   // > Lapiz.typeCheck.obj(obj)
   // > Lapiz.typeCheck.obj(obj, errStr)
   // Checks if the object is an object. If a string is supplied for errStr, it
   // will throw errStr if obj is not an number. Note that many things like Arrays and
   // Dates are objects, but numbers strings and functions are not.
-  $L.set($L.typeCheck, "obj", function(obj, err){return $L.typeCheck(obj, "object", err, 2)});
+  $L.set($L.typeCheck, "obj", function(obj, err){
+    var typeCheck = $L.typeCheck(obj, "object");
+    if (err !== undefined && !typeCheck){
+      throw new Error(err);
+    }
+    return typeCheck;
+  });
 
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunctionName)
@@ -190,7 +212,7 @@ var Lapiz = (function ModuleLoaderModule($L){
     $L.assert(args.length >= 2, "Lapiz.typeCheck.nested requres at least 2 arguments");
     var typeCheckFn = args.pop();
     typeCheckFn = $L.typeCheck.string(typeCheckFn) ? $L.typeCheck[typeCheckFn] : typeCheckFn;
-    $L.typeCheck.func(typeCheckFn, "Last argument to Lapiz.typeCheck.nested must be a function");
+    $L.typeCheck.func(typeCheckFn, "Last argument to Lapiz.typeCheck.nested must be a function or name of a typeCheck helper method");
     var obj;
     for(obj = args.shift(); obj !== undefined && args.length > 0 ; obj = obj[args.shift()]);
     return typeCheckFn(obj);
@@ -877,7 +899,7 @@ Lapiz.Module("Errors", ["Events"], function($L){
   // > Lapiz.on.error( errHandler(err) )
   // > Lapiz.on.error = errHandler(err)
   // Register an error handler to listen for errors thrown with Lapiz.Err.throw
-  var errEvent = $L.Event.linkProperty($L.on, "error");
+  var _errEvent = $L.Event.linkProperty($L.on, "error");
 
   // > Lapiz.Err.throw(Error)
   // > Lapiz.Err.throw(errString)
@@ -886,13 +908,8 @@ Lapiz.Module("Errors", ["Events"], function($L){
   $L.set($L.Err, "throw", function(err){
     if ($L.typeCheck.string(err)){
       err = new Error(err);
-      // peel one layer off the stack because it will always be
-      // this line
-      err.stack = err.stack.split("\n");
-      err.stack.shift();
-      err.stack = err.stack.join("\n");
     }
-    errEvent.fire(err);
+    _errEvent.fire(err);
     throw err;
   });
 
