@@ -835,11 +835,16 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
 
   function _getFormValues (form) {
     var nameQuery = form.querySelectorAll("[name]");
-    var i, n;
+    var i, n, nodeType;
     var data = $L.Map();
     for(i=nameQuery.length-1; i>=0; i-=1){
       n = nameQuery[i];
-      data[ n.name ] = n.value;
+      nodeType = n.type;
+      if ( nodeType === "checkbox" || nodeType === "radio"){
+        data[ n.name ] = n.checked;
+      } else {
+        data[ n.name ] = n.value;
+      }
     }
     return data;
   }
