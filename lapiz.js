@@ -1419,9 +1419,19 @@ Lapiz.Module("Objects", ["Events"], function($L){
     }
     return function(){
       //todo: add test for fireChange and event
+      // > lapizObject.properties:setterInterface
+      // The 'this' property of a setter will be the setter interface
       var setterInterface = {
+        // > lapizObject.properties:setterInterface.set
+        // Setting this to false will prevent the set and event fire
         set: true,
+        // > lapizObject.properties:fireChange
+        // setting this to false will prevent the fire event, but the value
+        // will still be set to the return value
         fireChange: true,
+        // > lapizObject.properties:setterInterface.event(obj.pub, val, oldVal)
+        // Attaching an event here will cause this event to be fired after the
+        // set operation
         event: undefined,
       };
       var val = func.apply(setterInterface, arguments);
@@ -1481,7 +1491,7 @@ Lapiz.Module("Objects", ["Events"], function($L){
     obj.pub.name = "test";
     console.log(obj.attr.name); // test
     obj.attr.name = "bar";
-    console.log(obj.pub.name); // test
+    console.log(obj.pub.name); // bar
     */
     self.attr = $L.Map();
     self._cls = $L.Object;
@@ -1762,8 +1772,8 @@ Lapiz.Module("Objects", ["Events"], function($L){
     $L.Map.meth(ret, function StaticSet(name, value){$L.Map.prop(ret, name, { value: value });});
     // > lapizClass.StaticProp(name, desc)
     $L.Map.meth(ret, function StaticProp(name, desc){$L.Map.prop(ret, name, desc);});
-    // > lapizClass.StaticMeth(name, fn)
-    // > lapizClass.StaticMeth(namedFunc)
+    // > lapizClass.StaticMethod(name, fn)
+    // > lapizClass.StaticMethod(namedFunc)
     $L.Map.meth(ret, function StaticMethod(name, fn){$L.Map.meth(ret, name, fn);});
     // > lapizClass.StaticSetterMethod(name, fn)
     // > lapizClass.StaticSetterMethod(namedFunc)
