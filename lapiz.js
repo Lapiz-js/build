@@ -699,7 +699,11 @@ Lapiz.Module("Dictionary", function($L){
     // val is returned when dict is called as a setter.
     var self = function(key, val){
       if (val === undefined){
-        return _dict[key];
+        try {
+          return _dict[key];
+        } catch (err){
+          Lapiz.Err.throw(err);
+        }
       }
 
       var oldVal = _dict[key];
