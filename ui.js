@@ -76,24 +76,6 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
     return _views[name].cloneNode(true);
   });
 
-  // > Lapiz.UI.Children(node)
-  // > Lapiz.UI.Children(selectorStr)
-  // Gets all the children of the node as an array, including textnodes, which
-  // the built-in node.children will leave out. Node can also be a document
-  // fragment. If a selectorStr is used, it will be run against document.
-  ui.meth(function Children(node){
-    if ($L.typeCheck.string(node)){
-      node = document.querySelector(node);
-    }
-    $L.typeCheck(node, Node, "Children requires node or node id");
-    var children = [];
-    var child;
-    for(child = node.firstChild; child !== null; child = child.nextSibling){
-      children.push(child);
-    }
-    return children;
-  });
-
   // > Lapiz.UI.View(name, viewStr)
   // Adds a view that can be rendered or cloned.
   ui.meth(function View(name, viewStr){
@@ -315,7 +297,13 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
       if (_props["template"] === undefined){
         _props["template"] = node.textContent;
       }
-      node.textContent = $L.UI.bindState.templator(_props["template"], $L.UI.bindState.ctx);
+      i = $L.UI.bindState.templator(_props["template"], $L.UI.bindState.ctx);
+      if ($L.typeCheck(i, Node)){
+        $L.UI.insertAfter(i, node);
+        node.remove();
+      } else {
+        node.textContent = i;
+      }
     }
     if (node.nodeType === 1){ //Element node
       var attrTemplates = _props['attrTemplates'];
@@ -600,6 +588,32 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
     return (doc || document).getElementById(elId);
   });
 
+  // > Lapiz.UI.insertAfter(newNode, afterElement)
+  ui.meth(function insertAfter(newNode, afterElement){
+    $L.typeCheck(afterElement, Node, "insertAfter: afterElement must be a Node");
+    $L.assert(afterElement.parentNode !== null, "insertAfter: afterElement parent cannot be null");
+    $L.typeCheck(newNode, Node, "insertAfter: newNode must be a Node");
+    afterElement.parentNode.insertBefore(newNode, afterElement.nextSibling);
+  });
+
+  // > Lapiz.UI.appendChild(child)
+  // > Lapiz.UI.appendChild(child, parent)
+  // > Lapiz.UI.appendChild(childStr)
+  // > Lapiz.UI.appendChild(childStr, parent)
+  ui.meth(function appendChild(child, parent){
+    parent = parent || document;
+    if ($L.typeCheck.string(child)){
+      child = child.toLowerCase();
+      if (child === "textnode"){
+        child = document.createTextNode("");
+      } else {
+        child = document.createElement(child);
+      }
+    }
+    parent.appendChild(child);
+    return child;
+  });
+
   // > Lapiz.UI.empty(node)
   // > Lapiz.UI.empty(nodeId)
   ui.meth(function empty(node){
@@ -611,18 +625,6 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
       node.removeChild(node.firstChild);
     }
     return node;
-  });
-
-  // > attribute:resolver
-  // > <tag resolver="$resolver">...</tag>
-  // Takes the current tokenizer and the tokenizer assigned and creates a new
-  // templator that will be used on all attributes processed after this and all
-  // child nodes. By default, resolver is the first attribute evaluated.
-  $L.UI.attribute("resolver", function(node, ctx, resolver){
-    var _props = _getProperties(node);
-    var templator = $L.Template.Templator($L.UI.bindState.templator.tokenizer, resolver);
-    _props["templator"] = templator;
-    $L.UI.bindState.templator = templator;
   });
 
   // > Lapiz.UI.getStyle(node, property)
@@ -647,12 +649,50 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
     } catch(err){}
     return style;
   })
+
+  // > Lapiz.UI.Children(node)
+  // > Lapiz.UI.Children(selectorStr)
+  // Gets all the children of the node as an array, including textnodes, which
+  // the built-in node.children will leave out. Node can also be a document
+  // fragment. If a selectorStr is used, it will be run against document.
+  ui.meth(function Children(node){
+    if ($L.typeCheck.string(node)){
+      node = document.querySelector(node);
+    }
+    $L.typeCheck(node, Node, "Children requires node or node id");
+    var children = [];
+    var child;
+    for(child = node.firstChild; child !== null; child = child.nextSibling){
+      children.push(child);
+    }
+    return children;
+  });
 });
 Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   var UI = $L.UI;
 
-  $L.UI.attribute("with", function(node, oldCtx, newCtx){
-    $L.UI.bindState.ctx = newCtx;
+  // > attribute:resolver
+  // > <tag resolver="$resolver">...</tag>
+  // Takes the current tokenizer and the tokenizer assigned and creates a new
+  // templator that will be used on all attributes processed after this and all
+  // child nodes. By default, resolver is the first attribute evaluated.
+  UI.attribute("resolver", function(node, ctx, resolver){
+    var templator = $L.Template.Templator(UI.bindState.templator.tokenizer, resolver);
+    UI.bindState.templator = templator;
+  });
+
+  // > attribute:templator
+  // > <tag templator="$templator">...</tag>
+  // Takes the current tokenizer and the tokenizer assigned and creates a new
+  // templator that will be used on all attributes processed after this and all
+  // child nodes. By default, templator is the second attribute evaluated only
+  // after resolver.
+  UI.attribute("templator", function(node, ctx, templator){
+    UI.bindState.templator = templator;
+  });
+
+  UI.attribute("with", function(node, oldCtx, newCtx){
+    UI.bindState.ctx = newCtx;
   });
 
   // > attribute:if
@@ -801,35 +841,35 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     // The given function will be called with the node is clicked.
     "click": function(node, _, fn){
       if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
-      $L.UI.bindState.firstPass && node.addEventListener("click", fn);
+      UI.bindState.firstPass && node.addEventListener("click", fn);
     },
     // > attribute:display
     // > <htmlNode display="$ctxFn">...</htmlNode>
     // The given function will be called with the node is first displayed.
     "display": function(node, ctx, fn){
       if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
-      $L.UI.bindState.firstPass && fn(node,ctx);
+      UI.bindState.firstPass && fn(node,ctx);
     },
     // > attribute:blur
     // > <htmlNode blur="$ctxFn">...</htmlNode>
     // The given function will be called with the node loses focus.
     "blur": function(node, _, fn){
       if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
-      $L.UI.bindState.firstPass && node.addEventListener("blur", fn);
+      UI.bindState.firstPass && node.addEventListener("blur", fn);
     },
     // > attribute:submit
     // > <htmlNode submit="$ctxFn">...</htmlNode>
     // The given function will be called when the submit event fires.
     "submit": function(node, _, fn){
       if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
-      $L.UI.bindState.firstPass && node.addEventListener("submit", fn);
+      UI.bindState.firstPass && node.addEventListener("submit", fn);
     },
     // > attribute:change
     // > <htmlNode submit="$ctxFn">...</htmlNode>
     // The given function will be called when the change event fires.
     "change": function(node, _, fn){
       if (typeof(fn) !== "function") { $L.Err.throw("Expected function"); }
-      $L.UI.bindState.firstPass && node.addEventListener("change", fn);
+      UI.bindState.firstPass && node.addEventListener("change", fn);
     },
     // > attribute:isChecked
     // > <htmlNode isChecked="$boolVal">...</htmlNode>
@@ -1019,9 +1059,14 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
     };
   });
 
-  // > attribute:resolver
+  // > mediator:resolver
   Lapiz.UI.mediator("resolver", function(node, ctx, resolverFn){
     return resolverFn(node, ctx);
+  });
+
+  // > mediator:templator
+  Lapiz.UI.mediator("templator", function(node, ctx, templatorFn){
+    return templatorFn(node, ctx);
   });
 
   // > attribute:selectVal
@@ -1044,7 +1089,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   // > attribute:focus
   // Causes this element to recieve focus when a view is rendered
   UI.attribute("focus", function(node, ctx, val){
-    $L.UI.on.add(node, function(){
+    UI.on.add(node, function(){
       node.focus();
     });
   });

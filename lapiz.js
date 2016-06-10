@@ -123,18 +123,28 @@ var Lapiz = (function ModuleLoaderModule($L){
   // > Lapiz.typeCheck(obj, type, errStr)
   // Checks if the type of obj matches type. If type is a string, typeof will be
   // used, if type is a class, instanceof will be used. To throw an error when
-  // the types do not match, specify errStr as a string. Other wise, typeCheck will
-  // return a boolean indicating if the types matched.
+  // the types do not match, specify errStr as a string. Other wise, typeCheck
+  // will return a boolean indicating if the types matched.
   /* >
   Lapiz.typeCheck([], Array); // true
   Lapiz.typeCheck("test", "string"); // true
   Lapiz.typeCheck("test", Array); // false
   Lapiz.typeCheck([], "string", "Expected string"); // throws an error
   */
-  $L.set($L, "typeCheck", function(obj, type, err, peelLayers){
-    var typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
+  $L.set($L, "typeCheck", function(obj, type, err){
+    var typeCheck = false;
+    try{
+      typeCheck = (typeof type === "string") ? (typeof obj === type) : (obj instanceof type);
+    } catch(e) {
+      throw new Error("typeCheck error, type arg is probably not instance class");
+    }
     if (err !== undefined && !typeCheck){
-      throw new Error(err);
+      err = new Error(err);
+      if ($L.Err && $L.Err.throw){
+        $L.Err.throw(err)
+      } else {
+        throw err;
+      }
     }
     return typeCheck;
   });
@@ -144,11 +154,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // Checks if the object is a function. If a string is supplied for errStr, it
   // will throw errStr if obj is not a function.
   $L.set($L.typeCheck, "func", function(obj, err){
-    var typeCheck = $L.typeCheck(obj, "function");
-    if (err !== undefined && !typeCheck){
-      throw new Error(err);
-    }
-    return typeCheck;
+    return $L.typeCheck(obj, "function", err);
   });
 
   // > Lapiz.typeCheck.array(obj)
@@ -156,11 +162,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // Checks if the object is a array. If a string is supplied for errStr, it
   // will throw errStr if obj is not an array.
   $L.set($L.typeCheck, "array", function(obj, err){
-    var typeCheck = $L.typeCheck(obj, Array);
-    if (err !== undefined && !typeCheck){
-      throw new Error(err);
-    }
-    return typeCheck;
+    return $L.typeCheck(obj, Array, err);
   });
 
   // > Lapiz.typeCheck.string(obj)
@@ -168,11 +170,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // Checks if the object is a string. If a string is supplied for errStr, it
   // will throw errStr if obj is not an string.
   $L.set($L.typeCheck, "string", function(obj, err){
-    var typeCheck = $L.typeCheck(obj, "string");
-    if (err !== undefined && !typeCheck){
-      throw new Error(err);
-    }
-    return typeCheck;
+    return $L.typeCheck(obj, "string", err);
   });
 
   // > Lapiz.typeCheck.number(obj)
@@ -180,11 +178,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // Checks if the object is a number. If a string is supplied for errStr, it
   // will throw errStr if obj is not an number.
   $L.set($L.typeCheck, "number", function(obj, err){
-    var typeCheck = $L.typeCheck(obj, "number");
-    if (err !== undefined && !typeCheck){
-      throw new Error(err);
-    }
-    return typeCheck;
+    return $L.typeCheck(obj, "number", err);
   });
 
   // > Lapiz.typeCheck.obj(obj)
@@ -193,11 +187,7 @@ var Lapiz = (function ModuleLoaderModule($L){
   // will throw errStr if obj is not an number. Note that many things like Arrays and
   // Dates are objects, but numbers strings and functions are not.
   $L.set($L.typeCheck, "obj", function(obj, err){
-    var typeCheck = $L.typeCheck(obj, "object");
-    if (err !== undefined && !typeCheck){
-      throw new Error(err);
-    }
-    return typeCheck;
+    return $L.typeCheck(obj, "object", err);
   });
 
   // > Lapiz.typeCheck.nested(obj, nestedFields..., typeCheckFunction)
