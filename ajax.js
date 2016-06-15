@@ -25,6 +25,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
   }
 
   function _encodeURI(data){
+    data = $L.parse.string(data);
     data = data.replace(/%/g, "%25");
     data = data.replace(/\+/g, "%2B");
     data = data.replace(/&/g, "%26");
