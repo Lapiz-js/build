@@ -29,13 +29,14 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
     data = data.replace(/\+/g, "%2B");
     data = data.replace(/&/g, "%26");
     data = data.replace(/=/g, "%3D");
-    return encodeURI(data);
+    data = data.replace(/\n/g, "%0A");
+    return data;
   }
 
   function _encodeData(data){
     var dataStr = [];
     $L.each(data, function(v, k){
-      dataStr.push(encodeURI(k) + "=" + encodeURI(v));
+      dataStr.push(_encodeURI(k) + "=" + _encodeURI(v));
     });
     return dataStr.join("&");
   }
