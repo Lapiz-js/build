@@ -24,6 +24,14 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
     };
   }
 
+  function _encodeURI(data){
+    data = data.replace(/%/g, "%25");
+    data = data.replace(/\+/g, "%2B");
+    data = data.replace(/&/g, "%26");
+    data = data.replace(/=/g, "%3D");
+    return encodeURI(data);
+  }
+
   function _encodeData(data){
     var dataStr = [];
     $L.each(data, function(v, k){
@@ -96,9 +104,6 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
       headers = $L.Map();
     }
     headers["Content-type"] = "application/x-www-form-urlencoded";
-    headers["Content-length"] = data.length;
-    headers["Connection"] = "close";
-
     return request("POST", url, undefined, data, callback, headers);
   });
 
