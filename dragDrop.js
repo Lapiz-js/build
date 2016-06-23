@@ -73,10 +73,10 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
     var droppedIdx = $L.each(_droppables, function(node){
       var bcr = node.getBoundingClientRect();
       if (
-        e.clientX >= bcr.x &&
-        e.clientX <= bcr.x+bcr.width &&
-        e.clientY >= bcr.y &&
-        e.clientY <= bcr.y+bcr.height
+        e.clientX >= bcr.left &&
+        e.clientX <= bcr.left+bcr.width &&
+        e.clientY >= bcr.top &&
+        e.clientY <= bcr.top+bcr.height
       ){
         return node;
       }
