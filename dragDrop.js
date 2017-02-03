@@ -101,7 +101,7 @@ Lapiz.Module("DragDrop", ["UI"], function($L){
   function _getAttr(attrVal){
     if (attrVal === undefined || attrVal === ""){
       attrVal = {};
-    } else if ($L.typeCheck.string(attrVal)){
+    } else if ($L.typeCheck.str(attrVal)){
       attrVal = JSON.parse(attrVal);
     }
     return attrVal;

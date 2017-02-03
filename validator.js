@@ -10,7 +10,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
       "id" : "required"
     });
   */
-  $L.Map.meth($L, function Validator(validationRules, data, formatFunc){
+  $L.set.meth($L, function Validator(validationRules, data, formatFunc){
     function validator(data, formatFunc){
       formatFunc = formatFunc || $L.Validator.format.array;
       var errs = $L.Map();
@@ -41,14 +41,14 @@ Lapiz.Module("Validator", ["Collections"], function($L){
     return validator;
   });
 
-  $L.Map.meth($L.Validator, function required(name, val){
+  $L.set.meth($L.Validator, function required(name, val){
     if (val === "" || val === undefined){
       return name + " is required";
     }
     return false;
   });
 
-  $L.Map.meth($L.Validator, function min(name, val, args){
+  $L.set.meth($L.Validator, function min(name, val, args){
     var minLen = Lapiz.parse["int"](args[0]);
     var len = val.length;
     if (len < minLen && len > 0){
@@ -57,7 +57,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
     return false;
   });
 
-  $L.Map.meth($L.Validator, function max(name, val, args){
+  $L.set.meth($L.Validator, function max(name, val, args){
     var maxLen = Lapiz.parse["int"](args[0]);
     var len = val.length;
     if (len > maxLen){
@@ -66,7 +66,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
     return false;
   });
 
-  $L.Map.meth($L.Validator, function numberMin(name, val, args){
+  $L.set.meth($L.Validator, function numberMin(name, val, args){
     var min = Lapiz.parse.number(args[0]);
     val = Lapiz.parse.number(val);
     if (isNaN(val)) { return false; }
@@ -76,7 +76,7 @@ Lapiz.Module("Validator", ["Collections"], function($L){
     return false;
   });
 
-  $L.Map.meth($L.Validator, function numberMax(name, val, args){
+  $L.set.meth($L.Validator, function numberMax(name, val, args){
     var max = Lapiz.parse.number(args[0]);
     val = Lapiz.parse.number(val);
     if (isNaN(val)) { return false; }

@@ -61,7 +61,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
     var x = _getXmlHttp();
     if (urlData !== undefined){
       url += (url.indexOf("?") === -1) ? "?" : "&"
-      if ($L.typeCheck.string(urlData)){
+      if ($L.typeCheck.str(urlData)){
         url += urlData;  
       } else {
         url += _encodeData(urlData);
@@ -98,7 +98,7 @@ Lapiz.Module("Ajax", ["Collections", "Events"], function($L){
 
     if (data === undefined){
       data = "";
-    } else if (!$L.typeCheck.string(data)){
+    } else if (!$L.typeCheck.str(data)){
       data = _encodeData(data);
     }
 
