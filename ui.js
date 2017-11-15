@@ -891,7 +891,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
 
   function _getFormValues (form) {
     var nameQuery = form.querySelectorAll("[name]");
-    var i, n, nodeType, parse;
+    var i, n, nodeType;
     var data = $L.Map();
     for(i=nameQuery.length-1; i>=0; i-=1){
       n = nameQuery[i];
@@ -899,12 +899,7 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
       if ( nodeType === "checkbox" || nodeType === "radio"){
         data[ n.name ] = n.checked;
       } else {
-        parse = n.getAttribute("parse");
-        if (parse != null){
-          data[ n.name ] = $L.parse(parse)(n.value);
-        } else{
-          data[ n.name ] = n.value;
-        }
+        data[ n.name ] = n.value;
       }
     }
     return data;
@@ -1050,6 +1045,15 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   // > <tag click="view.foo">Foo</tag>
   //
   // > Lapiz.UI.mediator.view("foo", "foo > #main");
+  // or
+  /* >
+  Lapiz.UI.mediator.view("foo", function(node, ctx){
+    return {
+      view: "someview > #string",
+      ctx: {"another": "context"}
+    };
+  });
+  */
   UI.mediator("view", function(node, ctx, viewOrGenerator){
     return function(){
       var view;
@@ -1064,8 +1068,9 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
         if (viewOrGenerator.view !== undefined){
           view = viewOrGenerator.view;
           viewCtx = (viewOrGenerator.ctx === undefined) ? viewCtx : viewOrGenerator.ctx;
+        } else{
+          $L.Err.toss("An invalid view was given or generated");
         }
-        $L.Err.toss("An invalid view was given or generated");
       }
       UI.render(view, viewCtx);
     };
