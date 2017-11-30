@@ -1865,6 +1865,28 @@ Lapiz.Module("Obj", ["Events"], function($L){
     _classBuilderWM.get(this).methods[name] = fn;
   });
 
+  // > classDef.meth(namedFn)
+  // > classDef.meth(name, fn)
+  // Defines a method on the class. Methods are late-bound:
+  /* >
+    var Person = Lapiz.Cls(function(cls){
+      cls.meth(function foo(){
+        return "FOO"+this.pub.name;
+      });
+    });
+
+    var adam = Person();
+    adam.name = "Adam";
+    adam.foo(); // returns "FOOAdam"
+  */
+  $L.set.binder(_clsDefProto, function getter(name, fn){
+    if (fn === undefined){
+      fn = name;
+      name = $L.getFnName(fn);
+    }
+    _classBuilderWM.get(this).getters[name] = fn;
+  });
+
   function lateBindProp(proto, name, val){
     var def = $L.Map();
     def[name] = val;
@@ -1901,6 +1923,16 @@ Lapiz.Module("Obj", ["Events"], function($L){
     });
   }
 
+  function lateBindGetter(proto, name, fn){
+    $L.set.prop(proto, name, {
+      get: function(){
+        fn = fn.bind(_objPriv.get(this))
+        $L.set.getter(this, name, fn);
+        return fn();
+      }
+    });
+  }
+
   var _newClassEvent = $L.Event();
   // > Lapiz.on.Cls(fn)
   // > Lapiz.on.Cls = fn
@@ -1915,6 +1947,7 @@ Lapiz.Module("Obj", ["Events"], function($L){
     var priv = $L.Map();
     priv.props = $L.Map();
     priv.methods = $L.Map();
+    priv.getters = $L.Map();
     _classBuilderWM.set(pub, priv);
 
     classDef.apply(pub,[pub]);
@@ -1926,6 +1959,10 @@ Lapiz.Module("Obj", ["Events"], function($L){
 
     $L.each(priv.methods, function(val, key){
       lateBindMeth(_clsProto, key, val);
+    });
+
+    $L.each(priv.getters, function(val, key){
+      lateBindGetter(_clsProto, key, val);
     });
 
     var _constr = priv.constructor;
