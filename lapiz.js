@@ -1650,7 +1650,15 @@ Lapiz.Module("Index", function($L){
       _primary(primaryFunc(obj), obj);
     }
 
+    // > indexedClass.Exclude
+    // This can be set to a function that takes an instance of the class and
+    // returns a boolean. If it returns true then the object will not be
+    // indexed.
+
     cls.on.create(function(obj){
+      if ($L.typeCheck.nested(domain, "Exclude", "func") && domain.Exclude(obj)) {
+        return;
+      }
       obj.on.change(_upsert);
       obj.on.remove(function(obj){
         if ($L.typeCheck.nested(obj, "on", "change", "deregister", "func")){
@@ -1691,6 +1699,7 @@ Lapiz.Module("Index", function($L){
   // > Lapiz.Index.defaultPrimary
   // Sets the default primary key name. It defaults to "id".
   $L.Index.defaultPrimary = "id";
+
 });
 Lapiz.Module("Obj", ["Events"], function($L){
 
@@ -1865,20 +1874,9 @@ Lapiz.Module("Obj", ["Events"], function($L){
     _classBuilderWM.get(this).methods[name] = fn;
   });
 
-  // > classDef.meth(namedFn)
-  // > classDef.meth(name, fn)
-  // Defines a method on the class. Methods are late-bound:
-  /* >
-    var Person = Lapiz.Cls(function(cls){
-      cls.meth(function foo(){
-        return "FOO"+this.pub.name;
-      });
-    });
-
-    var adam = Person();
-    adam.name = "Adam";
-    adam.foo(); // returns "FOOAdam"
-  */
+  // > classDef.getter(namedFn)
+  // > classDef.getter(name, fn)
+  // Defines a getter on the class. Getter are late-bound:
   $L.set.binder(_clsDefProto, function getter(name, fn){
     if (fn === undefined){
       fn = name;
@@ -1926,9 +1924,9 @@ Lapiz.Module("Obj", ["Events"], function($L){
   function lateBindGetter(proto, name, fn){
     $L.set.prop(proto, name, {
       get: function(){
-        fn = fn.bind(_objPriv.get(this))
-        $L.set.getter(this, name, fn);
-        return fn();
+        var bfn = fn.bind(_objPriv.get(this))
+        $L.set.getter(this, name, bfn);
+        return bfn();
       }
     });
   }
