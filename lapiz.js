@@ -774,10 +774,10 @@ Lapiz.Module("Collections", function($L){
   });
 
   // > Lapiz.each(collection, fn(val, key, collection))
-  // Iterates over the collection, calling func(key, val) for each item in the
-  // collection. If the collection is an array, key will be the index. If func
-  // returns true (or an equivalent value) the Lapiz.each will return the
-  // current key allowing each to act as a search.
+  // Iterates over the collection, calling func(key, val, collection) for each
+  // item in the collection. If the collection is an array, key will be the
+  // index. If func returns true (or an equivalent value) the Lapiz.each will
+  // return the current key allowing each to act as a search.
   /* >
   var arr = [3,1,4,1,5,9];
   Lapiz.each(arr, function(val, key){
@@ -795,18 +795,22 @@ Lapiz.Module("Collections", function($L){
   });
   */
   $L.set.meth($L, function each(obj, fn){
+    $L.typeCheck.func(fn, "Second argument to each must be a function");
+    if (obj === undefined || obj === null){
+      return undefined;
+    }
     var i;
     if ($L.typeCheck.arr(obj)){
       var l = obj.length;
       for(i=0; i<l; i+=1){
-        if (fn(obj[i], i)) {return i;}
+        if (fn(obj[i], i, obj)) {return i;}
       }
       return -1;
-    } else {
-      var keys = Object.keys(obj);
-      for(i=keys.length-1; i>=0; i-=1){
-        if (fn(obj[keys[i]], keys[i], obj)) {return keys[i];}
-      }
+    }
+
+    var keys = Object.keys(obj);
+    for(i=keys.length-1; i>=0; i-=1){
+      if (fn(obj[keys[i]], keys[i], obj)) {return keys[i];}
     }
     return undefined; //makes linter happy
   });
@@ -1650,13 +1654,13 @@ Lapiz.Module("Index", function($L){
       _primary(primaryFunc(obj), obj);
     }
 
-    // > indexedClass.Exclude
+    // > indexedClass.exclude
     // This can be set to a function that takes an instance of the class and
     // returns a boolean. If it returns true then the object will not be
     // indexed.
 
     cls.on.create(function(obj){
-      if ($L.typeCheck.nested(domain, "Exclude", "func") && domain.Exclude(obj)) {
+      if ($L.typeCheck.nested(domain, "exclude", "func") && domain.exclude(obj)) {
         return;
       }
       obj.on.change(_upsert);
