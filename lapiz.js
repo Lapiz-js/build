@@ -239,6 +239,828 @@ Lapiz.Module("Foo", ["Events"], function($L){
     }
   });
 })(Lapiz);
+Lapiz.Module("Dependency", function($L){
+  var _dependencies = {};
+
+  // > Lapiz.Dependency(name)
+  // Returns the dependency associated with name
+  $L.Dependency = function(name){
+    var d = _dependencies[name];
+    if (d === undefined) { Lapiz.Err.toss("Cannot find Dependency " + name); }
+    return d();
+  };
+
+  // > Lapiz.Dependency.Service(name, constructor)
+  // Service will register the constructor in manor so that calling
+  // > Lapiz.Dependency(name)(args...)
+  // on a service is the same as calling
+  // > new constructor(args...)
+  $L.Dependency.Service = function(name, fn){
+    function F(args) {
+      return fn.apply(this, args);
+    }
+    F.prototype = fn.prototype;
+
+    _dependencies[name] = function() {
+      return new F(arguments);
+    };
+  };
+
+  // > Lapiz.Dependency.Factory(name, fn)
+  // Factory is the most direct of the dependency registrations, it registers
+  // the function directly
+  $L.Dependency.Factory = function(name, fn){
+    _dependencies[name] = fn;
+  };
+
+  // > Lapiz.Dependency.Reference(name, resource)
+  // Wraps the resource in a closure function so that calling
+  // > Lapiz.Dependency(name)
+  // will return the resource.
+  $L.Dependency.Reference = function(name, res){
+    _dependencies[name] = function(){
+      return res;
+    };
+  };
+
+  // > Lapiz.Dependency.remove(name)
+  // Removes a dependency
+  $L.Dependency.remove = function(name){
+    delete _dependencies[name];
+  };
+
+  // > Lapiz.Dependency.has(name)
+  // Returns a boolean indicating if there is a resource registered corresonding
+  // to name.
+  $L.Dependency.has = function(name){
+    return _dependencies.hasOwnProperty(name);
+  };
+});
+Lapiz.Module("Dictionary", function($L){
+
+  // > Lapiz.Dictionary()
+  // > Lapiz.Dictionary(seed)
+  // Dictionaries allow for the storage of key/value pairs in a container that
+  // will emit events as the contents change.
+  //
+  // If seed values are specified, they will start as the contents of the
+  // dictionary, otherwise the dictionary will start off empty.
+  /* >
+  var emptyDict = Lapiz.Dictionary();
+  var fruitDict = Lapiz.Dictionary({
+    "A": "apple",
+    "B": "banana",
+    "C": "cantaloupe"
+  });
+  console.log(fruitDict("A")); // apple
+  fruitDict("A", "apricot");
+  console.log(fruitDict("A")); // apricot
+  emptyDict(12, "zebra");
+  console.log(emptyDict(12)); // apricot
+  */
+  $L.set($L, "Dictionary", function(val){
+    var _dict = $L.Map();
+    var _length = 0;
+
+    if (val !== undefined) {
+      if ($L.typeCheck.func(val.each)){
+        val.each(function(val, key){
+          _dict[key] = val;
+          _length += 1;
+        });
+      } else {
+        $L.each(val, function(val, key){
+          _dict[key] = val;
+          _length += 1;
+        });
+      }
+    }
+
+    // > dict(key)
+    // > dict(key, val)
+    // If only key is given, the value currently associated with that key will
+    // be returned. If key and val are both given, val is associated with key
+    // and the proper event (change or insert) will fire. For chaining, the
+    // val is returned when dict is called as a setter.
+    var self = function(key, val){
+      if (val === undefined){
+        try {
+          return _dict[key];
+        } catch (err){
+          Lapiz.Err.toss(err);
+        }
+      }
+
+      var oldVal = _dict[key];
+      _dict[key] = val;
+      if ( oldVal === undefined){
+        _length += 1;
+        _insertEvent.fire(key, self.Accessor);
+      } else {
+        _changeEvent.fire(key, self.Accessor, oldVal);
+      }
+
+      return val;
+    };
+
+    // > dict._cls
+    $L.set(self, "_cls", $L.Dictionary);
+
+    // > dict.on
+    // Namespace for dictionary events
+    self.on = $L.Map();
+
+    // > dict.on.insert(fn(key, accessor))
+    // Event will fire when a new key is added to the dictionary
+    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
+
+    // > dict.on.remove(fn(key, accessor, oldVal))
+    // Event will fire when a key is removed.
+    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
+
+    // > dict.on.change(fn(key, accessor, oldVal))
+    // Event will fire when a new key has a new value associated with it.
+    //
+    // One poentential "gotcha":
+    /* >
+      var d = Dict();
+      d.on.change = function(key, acc){
+        console.log(key, acc(key));
+      };
+      //assume person is a Lapiz Class
+      d(5, Person(5, "Adam", "admin")); // does not fire change, as it's an insert
+      d(5).role = "editor"; // this will fire person.on.change, but not dict.on.change
+      d(5, Person(5, "Bob", "editor")); // this will fire dict.on.change
+    */
+    // To create a change listener for a class on a dict (or other accessor)
+    /*
+      function chgFn(key, acc){...}
+      d.on.insert(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.remove(function(key, acc){
+        acc(key).on.change(chgFn);
+      });
+      d.on.change(function(key, acc, old){
+        old.on.change.deregister(chgFn);
+        var val = acc(key);
+        val.on.change(chgFn);
+        chgFn(key, acc);
+      });
+    */
+    var _changeEvent = $L.Event.linkProperty(self.on, "change", _changeEvent);
+
+    Object.freeze(self.on);
+
+    // > dict.length
+    // A read-only property that returns the length of a dictionary
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.length); // 3
+    */
+    $L.set.getter(self, function length(){
+      return _length;
+    });
+
+    // > dict.remove(key)
+    // The remove method will remove a key from the dictionary and the remove
+    // event will fire.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    fruitDict.remove("B");
+    console.log(fruitDict.length); // 2
+    console.log(fruitDict("B")); // undefined
+    */
+    self.remove = function(key){
+      if (_dict[key] !== undefined){
+        _length -= 1;
+        var obj = _dict[key];
+        delete _dict[key];
+        _removeEvent.fire(key, self.Accessor, obj);
+      }
+    };
+
+    // > dict.has(key)
+    // The has method returns a boolean stating if the dictionary has the given
+    // key.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.has("B")); // true
+    console.log(fruitDict.has(12)); // false
+    */
+    self.has = function(key){ return _dict[key] !== undefined; };
+
+    // > dict.each(fn(key, val))
+    // The each method takes a function and calls it for each key/value in the
+    // collection. The function will be called with two arguments, the key and
+    // the corresponding value. If any invocation of the function returns True,
+    // that will signal the each loop to break. The order is not guarenteed.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    fruitDict(function(key, val){
+      console.log(key, val);
+      return key === "A";
+    });
+    */
+    self.each = function(fn){
+      var keys = Object.keys(_dict);
+      var key, i;
+      for(i=keys.length-1; i>=0; i-=1){
+        key = keys[i];
+        if (fn(_dict[key], key)) { return key; }
+      }
+    };
+
+    // > dict.keys
+    // A read-only property that will return the keys as an array.
+    /* >
+    var fruitDict = Lapiz.Dictionary({
+      "A": "apple",
+      "B": "banana",
+      "C": "cantaloupe"
+    });
+    console.log(fruitDict.keys); // ["C", "A", "B"] in some order
+    */
+    $L.set.getter(self, function keys(){
+      return Object.keys(_dict);
+    });
+
+    // > dict.Sort(sorterFunction)
+    // > dict.Sort(attribute)
+    // Returns a Sorter with the dictionary as the accessor
+    self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
+
+    // > dict.Filter(filterFunction)
+    // > dict.Filter(attribute, val)
+    // Returns a Filter with the dictionary as the accessor
+    self.Filter = function(filterOrAttr, val){ return $L.Filter(self, filterOrAttr, val); };
+
+    // > dict.Accessor
+    // > dict.Accessor(key)
+    // The accessor is a read-only iterface to the dictionary
+    // * accessor.length
+    // * accessor.keys
+    // * accessor.has(key)
+    // * accessor.each(fn(val, key))
+    // * accessor.on.insert
+    // * accessor.on.change
+    // * accessor.on.remove
+    // * accessor.Sort
+    // * accessor.Filter
+    self.Accessor = function(key){
+      return _dict[key];
+    };
+    $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "&keys");
+    self.Accessor._cls = $L.Accessor;
+
+    Object.freeze(self.Accessor);
+    Object.freeze(self);
+
+    return self;
+  });
+
+  $L.set($L, "Accessor", function(accessor){
+    return accessor.Accessor;
+  });
+});
+Lapiz.Module("Errors", ["Events", "Collections"], function($L){
+
+  // > Lapiz.Err
+  // Namespace for error handling.
+  $L.set($L, "Err", $L.Map());
+
+  // > Lapiz.on.error( errHandler(err) )
+  // > Lapiz.on.error = errHandler(err)
+  // Register an error handler to listen for errors thrown with Lapiz.Err.toss
+  var _errEvent = $L.Event.linkProperty($L.on, "error");
+
+  // > Lapiz.Err.toss(Error)
+  // > Lapiz.Err.toss(errString)
+  // Sends the event to any errHandlers, then throws the event. Note that the
+  // error handlers cannot catch the error.
+  $L.set($L.Err, "toss", function(err){
+    if ($L.typeCheck.str(err)){
+      err = new Error(err);
+    }
+    _errEvent.fire(err);
+    throw err;
+  });
+
+  function logError(err){
+    $L.Err.logTo.log(err.message);
+    $L.Err.logTo.log(err.stack);
+  }
+
+  var _loggingEnabled = false;
+  var _nullLogger = $L.Map();
+  $L.set.meth(_nullLogger, function log(){});
+  Object.freeze(_nullLogger);
+
+  // > Lapiz.Err.logTo = logger
+  // The logger passed in must have logger.log method. It is meant to work with
+  // the console object:
+  // > Lapiz.Err.logTo = console
+  // But a custom logger can also be used.
+  $L.set.setterGetter($L.Err, "logTo", _nullLogger, function(newVal, oldVal){
+    if (newVal === null || newVal === undefined){
+      newVal = _nullLogger;
+      if (_loggingEnabled) {
+        _loggingEnabled = false;
+        $L.on.error.deregister(logError);
+      }
+    } else {
+      $L.typeCheck.func(newVal.log, "Object passed to Lapiz.Err.logTo must have .log method");
+      if (!_loggingEnabled) {
+        _loggingEnabled = true;
+        $L.on.error(logError);
+      }
+    }
+    return newVal;
+  });
+});Lapiz.Module("Events", ["Collections"], function($L){
+
+  // > Lapiz.Event()
+  /* >
+  var event = Lapiz.Event();
+  e.register(function(val){
+    console.log(val);
+  });
+  var fn2 = function(val){
+    alert(val);
+  };
+  e.register = fn2;
+  e.fire("Test 1"); //will log "Test 1" to the console and pop up an alert
+  e.register.deregister(fn2);
+  e.fire("Test 2"); //will log "Test 2" to the console
+  */
+  $L.set($L, "Event", function(){
+    var _listeners = [];
+    var event = Lapiz.Map();
+
+    // > event.register(fn)
+    // > event.register = fn
+    // The event.register method takes a function. All registered functions will
+    // be called when the event fires.
+    $L.set.setterMethod(event, function register(fn){
+      $L.typeCheck.func(fn, "Event registration requires a function");
+      _listeners.push(fn);
+      return fn;
+    });
+
+    // > event.register.deregister(fn)
+    // > event.register.deregister = fn
+    // The event.register.deregister method takes a function. If that function
+    // has been registered with the event, it will be removed.
+    $L.set.setterMethod(event.register, function deregister(fn){
+      $L.remove(_listeners, fn);
+      return fn;
+    });
+
+    // > event.fire(args...)
+    // The event.fire method will call all functions that have been registered
+    // with the event. The arguments that are passed into fire will be passed
+    // into the registered functions.
+    $L.set.meth(event, function fire(){
+      if (!event.fire.enabled) { return event; }
+      var i;
+      // make a copy in case _listeners changes during fire event
+      var listeners = _listeners.slice(0);
+      var l = listeners.length;
+      for(i=0; i<l; i+=1){
+        listeners[i].apply(this, arguments);
+      }
+      return event;
+    });
+
+    // > event.fire.enabled
+    // > event.fire.enabled = x
+    // The event.enabled is a boolean that can be set to enable or disable the
+    // fire method. If event.fire.enable is false, even if event.fire is called,
+    // it will not call the registered functions.
+    $L.set.setterGetter(event.fire, "enabled", true, function(enable){ return !!enable; });
+
+    // > event.fire.length
+    // The event.length is a read-only property that returns the number of
+    // functions registered with the event.
+    $L.set.getter(event.fire, function length(){ return _listeners.length; });
+
+    $L.set(event, "_cls", $L.Event);
+
+    return event;
+  });
+
+  // > Lapiz.SingleEvent()
+  // A single event is an instance that will only fire once. Registering a
+  // function after the event has fired will result in the function being
+  // immedatly invoked with the arguments that were used when the event fired.
+  $L.set($L, "SingleEvent", function(){
+    var _event = $L.Event();
+    var _hasFired = false;
+    var _args;
+    var facade = $L.Map();
+
+    // > singleEvent.register
+    $L.set.meth(facade, function register(fn){
+      if (_hasFired){
+        fn.apply(this, _args);
+      } else {
+        _event.register(fn);
+      }
+    });
+
+    // > singleEvent.register.deregister
+    $L.set.meth(facade.register, function deregister(fn){
+      if (_hasFired) { return; }
+      _event.register.deregister(fn);
+    });
+
+    // > singleEvent.fire
+    $L.set.meth(facade, function fire(){
+      if (_hasFired || !_event.fire.enabled) { return; }
+      _hasFired = true;
+      _args = arguments;
+      _event.fire.apply(this, _args);
+      delete _event;
+    });
+    $L.set(facade, "_cls", $L.SingleEvent);
+
+    // > singleEvent.fire.enabled
+    Object.defineProperty(facade.fire, "enabled", {
+      get: function(){ return _event.fire.enabled; },
+      set: function(val) { _event.fire.enabled = val; }
+    });
+
+    return facade;
+  });
+
+  // > Lapiz.Event.linkProperty(obj, name, evt)
+  // > Lapiz.Event.linkProperty(obj, name)
+  // This is a helper function for linking an event to an object. It will be
+  // linked like a setter method:
+  /* >
+  var map = Lapiz.Map();
+  var e = Lapiz.Event.linkProperty(map, "foo");
+  // These two are the same
+  map.foo(function(){...});
+  map.foo = function(){...};
+
+  // To deregister
+  map.foo.deregister(fn);
+  */
+  // If no event is given, one is created. The even is returned (either way).
+  $L.set($L.Event, "linkProperty", function(obj, name, evt){
+    if (evt === undefined){
+      evt = $L.Event();
+    }
+    Object.defineProperty(obj, name, {
+      get: function(){ return evt.register; },
+      set: function(fn){ evt.register(fn); }
+    });
+    return evt;
+  });
+
+  $L.set($L, "on", $L.Map());
+});
+Lapiz.Module("Filter", function($L){
+
+  // > Lapiz.Filter(accessor, filterFunc(key, accessor) )
+  // > Lapiz.Filter(accessor, field, val)
+  // Filters an accessor based on a function or field.
+  //
+  // One edge case is that an accessor cannot filter by field
+  // for undefined. To do that, you have to create a function
+  // to check the field.
+  $L.set($L, "Filter", function(accessor, filterOrField, val){
+    var _index = [];
+
+    // > filter(key)
+    // Returns the value associated with key, if it exists in the filter
+    var self = function(key){
+      if (_index.indexOf(key) > -1) { return accessor(key); }
+    };
+
+    // > filter._cls
+    // Return Lapiz.Filter
+    $L.set(self, "_cls", $L.Filter);
+
+    // if filterOrField is a string, and val is set, create a function
+    // to check that field against the val
+    var filterFn = filterOrField;
+    if ($L.typeCheck.str(filterOrField) && val !== undefined){
+      filterFn = function(key, accessor){
+        return accessor(key)[filterOrField] === val;
+      };
+    }
+
+    $L.typeCheck.func(filterFn, "Filter must be invoked with function or attriubte and value");
+
+    accessor.each(function(val, key){
+      if (filterFn(key, accessor)) { _index.push(key); }
+    });
+
+    // > filter.Accessor
+    // Returns a reference to self
+    $L.set(self, "Accessor", self);
+
+    // > filter.Sort(sorterFunction)
+    // > filter.Sort(fieldName)
+    // Returns a Sorter
+    $L.set.meth(self, function Sort(funcOrField){ return $L.Sort(self, funcOrField); });
+
+    // > filter.Filter(filterFunction)
+    // > filter.Filter(field, val)
+    // Returns a filter.
+    $L.set.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
+
+    // > filter.has(key)
+    // Returns a bool indicating if the filter contains the key
+    $L.set.meth(self, function has(key){
+      return _index.indexOf(key.toString()) > -1;
+    });
+
+    // > filter.keys
+    // Returns an array of keys
+    $L.set.getter(self, function keys(){
+      return _index.slice(0);
+    });
+
+    // > filter.length
+    // Read-only property that returns the length
+    $L.set.getter(self, function length(){
+      return _index.length;
+    });
+
+    $L.set.meth(self, function each(fn){
+      var i;
+      var l = _index.length;
+      for(i=0; i<l; i+=1){
+        key = _index[i];
+        if (fn(accessor(key), key)) { return key; }
+      }
+    });
+
+    // > filter.on
+    // Namespace for filter events
+    $L.set(self, "on", $L.Map());
+
+    // > filter.on.insert( function(key, accessor) )
+    // > filter.on.insert = function(key, accessor)
+    // Registration for insert event which fires when a new value is added to
+    // the filter
+    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
+
+    // > filter.on.change( function(key, accessor) )
+    // > filter.on.change = function(key, accessor)
+    // Registration of change event which fires when a new value is assigned to
+    // an existing key
+    var _changeEvent = $L.Event.linkProperty(self.on, "change");
+
+    // > filter.on.remove( function(key, val, accessor) )
+    // > filter.on.remove = function(key, val, accessor)
+    // Registration for remove event which fires when a value is removed
+    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
+    Object.freeze(self.on);
+
+    function inFn(key, accessor){
+      key = key.toString();
+      if (filterFn(key, accessor)){
+        _index.push(key);
+        _insertEvent.fire(key, self);
+      }
+    }
+    function remFn(key, accessor, oldVal){
+      key = key.toString();
+      var i = _index.indexOf(key);
+      if (i > -1){
+        _index.splice(i, 1);
+        _removeEvent.fire(key, self, oldVal);
+      }
+    }
+    function changeFn(key, accessor, oldVal){
+      key = key.toString();
+      var i = _index.indexOf(key);
+      var f = filterFn(key, accessor);
+      if (i > -1){
+        if (f) {
+          // was in the list, still in the list, but changed
+          _changeEvent.fire(key, self, oldVal);
+        } else {
+          // was in the list, is not now
+          _index.splice(i, 1);
+          _removeEvent.fire(key, accessor(key), self);
+        }
+      } else {
+        if (f){
+          // was not in the list, is now
+          _index.push(key);
+          _insertEvent.fire(key, self);
+        }
+      }
+    }
+
+    accessor.on.insert(inFn);
+    accessor.on.remove(remFn);
+    accessor.on.change(changeFn);
+
+    // > filter.ForceRescan()
+    // Rescans all values from parent access and fires insert and remove events
+    $L.set.meth(self, function ForceRescan(){
+      accessor.each(function(val, key){
+        key = key.toString();
+        var willBeInSet = filterFn(key, accessor);
+        var idx = _index.indexOf(key)
+        var isInSet = (idx !== -1);
+        if (willBeInSet && !isInSet){
+          _index.push(key);
+          _insertEvent.fire(key, self);
+        } else if (!willBeInSet && isInSet){
+          _index.splice(idx, 1);
+          _removeEvent.fire(key, accessor(key), self);
+        }
+      });
+    });
+
+    // > filter.func(filterFunc(key, accessor))
+    // > filter.func = filterFunc(key, accessor)
+    // Changes the function used for the filter. The insert and remove events
+    // will fire as the members are scanned to check if they comply with the
+    // new members
+    $L.set.setterMethod(self, function func(fn){
+      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
+        filterFn.on.change.deregister(self.ForceRescan);
+      }
+      filterFn = fn;
+      if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
+        filterFn.on.change(self.ForceRescan);
+      }
+      self.ForceRescan();
+    });
+
+    // > filter.func.on.change
+    // If the function supplied for filter function has a change event,
+    // then when that event fires, it will force a rescan.
+    if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
+      filterFn.on.change(self.ForceRescan);
+    }
+
+    // > filter.kill()
+    // After calling kill, a Filter is no longer live. It will not receive
+    // updates and can more easily be garbage collected (because it's
+    // parent accessor no longer has any references to it).
+    $L.set.meth(self, function kill(){
+      accessor.on.insert.deregister(inFn);
+      accessor.on.remove.deregister(remFn);
+      accessor.on.change.deregister(changeFn);
+      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
+        filterFn.on.change.deregister(self.ForceRescan);
+      }
+    });
+
+    Object.freeze(self);
+    return self;
+  });
+});
+Lapiz.Module("Index", ["Collections"], function($L){
+  // > Lapiz.Index(lapizClass)
+  // > Lapiz.Index(lapizClass, primaryFunc)
+  // > Lapiz.Index(lapizClass, primaryField)
+  // > Lapiz.Index(lapizClass, primary, domain)
+  // Adds an index to a class. If class.on.change and class.on.remove exist,
+  // the index will use these to keep itself up to date.
+  //
+  // Index needs a primary key. Any to entries with the same primary key are
+  // considered equivalent and one will overwrite the other. By default, Index
+  // assumes a primary property of "id". To use another field, pass in a string
+  // as primaryField. To generate a primary key from the data in the object,
+  // pass in a function as primaryFunc.
+  //
+  // By default, the Index methods will be attached directly to the class. If
+  // this would cause a namespace collision, a string can be provided as a
+  // domain and all methods will be attached in that namespace.
+  //
+  // The class does not have to be a lapizClass, but it must have a similar
+  // interface. Specifically, it must have cls.on.change and the instances of
+  // the class must have obj.on.change and obj.on.remove.
+  $L.set($L, "Index", function(cls, primaryFunc, domain){
+    if (primaryFunc === undefined){
+      primaryFunc = function(obj){return obj[$L.Index.defaultPrimary];};
+    } else if ($L.typeCheck.str(primaryFunc)){
+      primaryFunc = function(field){
+        return function(obj){
+          return obj[field];
+        };
+      }(primaryFunc);
+    } else if ( !$L.typeCheck.func(primaryFunc) ){
+      Lapiz.Err.toss("Expected a function or string");
+    }
+
+    if (domain === undefined) {
+      domain = cls;
+    } else {
+      cls[domain] = $L.Map();
+      domain = cls[domain];
+    }
+
+    var _primary = $L.Dictionary();
+
+    // > indexedClass.each( function(val, key))
+    domain.each = _primary.each;
+
+    // > indexedClass.has(key)
+    domain.has = _primary.has;
+
+    // > indexedClass.Filter(filterFunc)
+    // > indexedClass.Filter(filterField, val)
+    domain.Filter = _primary.Filter;
+
+    // > indexedClass.Sort(sortFunc)
+    // > indexedClass.Sort(sortField)
+    domain.Sort = _primary.Sort;
+
+    // > indexedClass.remove(key)
+    domain.remove = _primary.remove;
+
+    // > indexedClass.keys
+    Object.defineProperty(domain, "keys",{
+      get: function(){ return _primary.keys; }
+    });
+
+    // > indexedClass.all
+    Object.defineProperty(domain, "all",{
+      get: function(){ return _primary.Accessor; }
+    });
+
+    function _upsert(obj){
+      _primary(primaryFunc(obj), obj);
+    }
+
+    // > indexedClass.exclude
+    // This can be set to a function that takes an instance of the class and
+    // returns a boolean. If it returns true then the object will not be
+    // indexed.
+
+    cls.on.create(function(obj){
+      if ($L.typeCheck.nested(domain, "exclude", "func") && domain.exclude(obj)) {
+        return;
+      }
+      obj.on.change(_upsert);
+      obj.on.remove(function(obj){
+        if ($L.typeCheck.nested(obj, "on", "change", "deregister", "func")){
+          obj.on.change.deregister(_upsert);
+        }
+        _primary.remove(primaryFunc(obj));
+      });
+      _upsert(obj);
+    });
+
+    // > indexedClass.get(primaryKey)
+    // > indexedClass.get(field, val)
+    domain.get = function(idFuncOrAttr, val){
+      var matches = {};
+      if (val !== undefined){
+        _primary.each(function(obj, key){
+          if (obj[idFuncOrAttr] === val) { matches[key] = obj; }
+        });
+        return matches;
+      } else if (idFuncOrAttr instanceof Function){
+        _primary.each(function(obj, key){
+          if (idFuncOrAttr(obj)) { matches[key] = obj; }
+        });
+        return matches;
+      }
+      return _primary(idFuncOrAttr);
+    };
+
+    return cls;
+  });
+
+  // > Lapiz.Index.Class(constructor, primaryFunc, domain)
+  // Shorthand helper, constructor for an indexed class.
+  $L.set.meth($L.Index, function Cls(constructor, primaryFunc, domain){
+    return Lapiz.Index(Lapiz.Cls(constructor), primaryFunc, domain);
+  });
+
+  // > Lapiz.Index.defaultPrimary
+  // Sets the default primary key name. It defaults to "id".
+  $L.Index.defaultPrimary = "id";
+
+});
 Lapiz.Module("Collections", function($L){
   // > Lapiz.set
   // Defined in init. This is used as a namespace for many helpers in setting
@@ -881,828 +1703,6 @@ Lapiz.Module("Collections", function($L){
     }
     return map;
   });
-
-});
-Lapiz.Module("Dependency", function($L){
-  var _dependencies = {};
-
-  // > Lapiz.Dependency(name)
-  // Returns the dependency associated with name
-  $L.Dependency = function(name){
-    var d = _dependencies[name];
-    if (d === undefined) { Lapiz.Err.toss("Cannot find Dependency " + name); }
-    return d();
-  };
-
-  // > Lapiz.Dependency.Service(name, constructor)
-  // Service will register the constructor in manor so that calling
-  // > Lapiz.Dependency(name)(args...)
-  // on a service is the same as calling
-  // > new constructor(args...)
-  $L.Dependency.Service = function(name, fn){
-    function F(args) {
-      return fn.apply(this, args);
-    }
-    F.prototype = fn.prototype;
-
-    _dependencies[name] = function() {
-      return new F(arguments);
-    };
-  };
-
-  // > Lapiz.Dependency.Factory(name, fn)
-  // Factory is the most direct of the dependency registrations, it registers
-  // the function directly
-  $L.Dependency.Factory = function(name, fn){
-    _dependencies[name] = fn;
-  };
-
-  // > Lapiz.Dependency.Reference(name, resource)
-  // Wraps the resource in a closure function so that calling
-  // > Lapiz.Dependency(name)
-  // will return the resource.
-  $L.Dependency.Reference = function(name, res){
-    _dependencies[name] = function(){
-      return res;
-    };
-  };
-
-  // > Lapiz.Dependency.remove(name)
-  // Removes a dependency
-  $L.Dependency.remove = function(name){
-    delete _dependencies[name];
-  };
-
-  // > Lapiz.Dependency.has(name)
-  // Returns a boolean indicating if there is a resource registered corresonding
-  // to name.
-  $L.Dependency.has = function(name){
-    return _dependencies.hasOwnProperty(name);
-  };
-});
-Lapiz.Module("Dictionary", function($L){
-
-  // > Lapiz.Dictioanry()
-  // > Lapiz.Dictioanry(seed)
-  // Dictionaries allow for the storage of key/value pairs in a container that
-  // will emit events as the contents change.
-  //
-  // If seed values are specified, they will start as the contents of the
-  // dictionary, otherwise the dictionary will start off empty.
-  /* >
-  var emptyDict = Lapiz.Dictionary();
-  var fruitDict = Lapiz.Dictionary({
-    "A": "apple",
-    "B": "banana",
-    "C": "cantaloupe"
-  });
-  console.log(fruitDict("A")); // apple
-  fruitDict("A", "apricot");
-  console.log(fruitDict("A")); // apricot
-  emptyDict(12, "zebra");
-  console.log(emptyDict(12)); // apricot
-  */
-  $L.set($L, "Dictionary", function(val){
-    var _dict = $L.Map();
-    var _length = 0;
-
-    if (val !== undefined) {
-      if ($L.typeCheck.func(val.each)){
-        val.each(function(val, key){
-          _dict[key] = val;
-          _length += 1;
-        });
-      } else {
-        $L.each(val, function(val, key){
-          _dict[key] = val;
-          _length += 1;
-        });
-      }
-    }
-
-    // > dict(key)
-    // > dict(key, val)
-    // If only key is given, the value currently associated with that key will
-    // be returned. If key and val are both given, val is associated with key
-    // and the proper event (change or insert) will fire. For chaining, the
-    // val is returned when dict is called as a setter.
-    var self = function(key, val){
-      if (val === undefined){
-        try {
-          return _dict[key];
-        } catch (err){
-          Lapiz.Err.toss(err);
-        }
-      }
-
-      var oldVal = _dict[key];
-      _dict[key] = val;
-      if ( oldVal === undefined){
-        _length += 1;
-        _insertEvent.fire(key, self.Accessor);
-      } else {
-        _changeEvent.fire(key, self.Accessor, oldVal);
-      }
-
-      return val;
-    };
-
-    // > dict._cls
-    $L.set(self, "_cls", $L.Dictionary);
-
-    // > dict.on
-    // Namespace for dictionary events
-    self.on = $L.Map();
-
-    // > dict.on.insert(fn(key, accessor))
-    // Event will fire when a new key is added to the dictionary
-    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
-
-    // > dict.on.remove(fn(key, accessor, oldVal))
-    // Event will fire when a key is removed.
-    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
-
-    // > dict.on.change(fn(key, accessor, oldVal))
-    // Event will fire when a new key has a new value associated with it.
-    //
-    // One poentential "gotcha":
-    /* >
-      var d = Dict();
-      d.on.change = function(key, acc){
-        console.log(key, acc(key));
-      };
-      //assume person is a Lapiz Class
-      d(5, Person(5, "Adam", "admin")); // does not fire change, as it's an insert
-      d(5).role = "editor"; // this will fire person.on.change, but not dict.on.change
-      d(5, Person(5, "Bob", "editor")); // this will fire dict.on.change
-    */
-    // To create a change listener for a class on a dict (or other accessor)
-    /*
-      function chgFn(key, acc){...}
-      d.on.insert(function(key, acc){
-        acc(key).on.change(chgFn);
-      });
-      d.on.remove(function(key, acc){
-        acc(key).on.change(chgFn);
-      });
-      d.on.change(function(key, acc, old){
-        old.on.change.deregister(chgFn);
-        var val = acc(key);
-        val.on.change(chgFn);
-        chgFn(key, acc);
-      });
-    */
-    var _changeEvent = $L.Event.linkProperty(self.on, "change", _changeEvent);
-
-    Object.freeze(self.on);
-
-    // > dict.length
-    // A read-only property that returns the length of a dictionary
-    /* >
-    var fruitDict = Lapiz.Dictionary({
-      "A": "apple",
-      "B": "banana",
-      "C": "cantaloupe"
-    });
-    console.log(fruitDict.length); // 3
-    */
-    $L.set.getter(self, function length(){
-      return _length;
-    });
-
-    // > dict.remove(key)
-    // The remove method will remove a key from the dictionary and the remove
-    // event will fire.
-    /* >
-    var fruitDict = Lapiz.Dictionary({
-      "A": "apple",
-      "B": "banana",
-      "C": "cantaloupe"
-    });
-    fruitDict.remove("B");
-    console.log(fruitDict.length); // 2
-    console.log(fruitDict("B")); // undefined
-    */
-    self.remove = function(key){
-      if (_dict[key] !== undefined){
-        _length -= 1;
-        var obj = _dict[key];
-        delete _dict[key];
-        _removeEvent.fire(key, self.Accessor, obj);
-      }
-    };
-
-    // > dict.has(key)
-    // The has method returns a boolean stating if the dictionary has the given
-    // key.
-    /* >
-    var fruitDict = Lapiz.Dictionary({
-      "A": "apple",
-      "B": "banana",
-      "C": "cantaloupe"
-    });
-    console.log(fruitDict.has("B")); // true
-    console.log(fruitDict.has(12)); // false
-    */
-    self.has = function(key){ return _dict[key] !== undefined; };
-
-    // > dict.each(fn(key, val))
-    // The each method takes a function and calls it for each key/value in the
-    // collection. The function will be called with two arguments, the key and
-    // the corresponding value. If any invocation of the function returns True,
-    // that will signal the each loop to break. The order is not guarenteed.
-    /* >
-    var fruitDict = Lapiz.Dictionary({
-      "A": "apple",
-      "B": "banana",
-      "C": "cantaloupe"
-    });
-    fruitDict(function(key, val){
-      console.log(key, val);
-      return key === "A";
-    });
-    */
-    self.each = function(fn){
-      var keys = Object.keys(_dict);
-      var key, i;
-      for(i=keys.length-1; i>=0; i-=1){
-        key = keys[i];
-        if (fn(_dict[key], key)) { return key; }
-      }
-    };
-
-    // > dict.keys
-    // A read-only property that will return the keys as an array.
-    /* >
-    var fruitDict = Lapiz.Dictionary({
-      "A": "apple",
-      "B": "banana",
-      "C": "cantaloupe"
-    });
-    console.log(fruitDict.keys); // ["C", "A", "B"] in some order
-    */
-    $L.set.getter(self, function keys(){
-      return Object.keys(_dict);
-    });
-
-    // > dict.Sort(sorterFunction)
-    // > dict.Sort(attribute)
-    // Returns a Sorter with the dictionary as the accessor
-    self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
-
-    // > dict.Filter(filterFunction)
-    // > dict.Filter(attribute, val)
-    // Returns a Filter with the dictionary as the accessor
-    self.Filter = function(filterOrAttr, val){ return $L.Filter(self, filterOrAttr, val); };
-
-    // > dict.Accessor
-    // > dict.Accessor(key)
-    // The accessor is a read-only iterface to the dictionary
-    // * accessor.length
-    // * accessor.keys
-    // * accessor.has(key)
-    // * accessor.each(fn(val, key))
-    // * accessor.on.insert
-    // * accessor.on.change
-    // * accessor.on.remove
-    // * accessor.Sort
-    // * accessor.Filter
-    self.Accessor = function(key){
-      return _dict[key];
-    };
-    $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "&keys");
-    self.Accessor._cls = $L.Accessor;
-
-    Object.freeze(self.Accessor);
-    Object.freeze(self);
-
-    return self;
-  });
-
-  $L.set($L, "Accessor", function(accessor){
-    return accessor.Accessor;
-  });
-});
-Lapiz.Module("Errors", ["Events", "Collections"], function($L){
-
-  // > Lapiz.Err
-  // Namespace for error handling.
-  $L.set($L, "Err", $L.Map());
-
-  // > Lapiz.on.error( errHandler(err) )
-  // > Lapiz.on.error = errHandler(err)
-  // Register an error handler to listen for errors thrown with Lapiz.Err.toss
-  var _errEvent = $L.Event.linkProperty($L.on, "error");
-
-  // > Lapiz.Err.toss(Error)
-  // > Lapiz.Err.toss(errString)
-  // Sends the event to any errHandlers, then throws the event. Note that the
-  // error handlers cannot catch the error.
-  $L.set($L.Err, "toss", function(err){
-    if ($L.typeCheck.str(err)){
-      err = new Error(err);
-    }
-    _errEvent.fire(err);
-    throw err;
-  });
-
-  function logError(err){
-    $L.Err.logTo.log(err.message);
-    $L.Err.logTo.log(err.stack);
-  }
-
-  var _loggingEnabled = false;
-  var _nullLogger = $L.Map();
-  $L.set.meth(_nullLogger, function log(){});
-  Object.freeze(_nullLogger);
-
-  // > Lapiz.Err.logTo = logger
-  // The logger passed in must have logger.log method. It is meant to work with
-  // the console object:
-  // > Lapiz.Err.logTo = console
-  // But a custom logger can also be used.
-  $L.set.setterGetter($L.Err, "logTo", _nullLogger, function(newVal, oldVal){
-    if (newVal === null || newVal === undefined){
-      newVal = _nullLogger;
-      if (_loggingEnabled) {
-        _loggingEnabled = false;
-        $L.on.error.deregister(logError);
-      }
-    } else {
-      $L.typeCheck.func(newVal.log, "Object passed to Lapiz.Err.logTo must have .log method");
-      if (!_loggingEnabled) {
-        _loggingEnabled = true;
-        $L.on.error(logError);
-      }
-    }
-    return newVal;
-  });
-});Lapiz.Module("Events", ["Collections"], function($L){
-
-  // > Lapiz.Event()
-  /* >
-  var event = Lapiz.Event();
-  e.register(function(val){
-    console.log(val);
-  });
-  var fn2 = function(val){
-    alert(val);
-  };
-  e.register = fn2;
-  e.fire("Test 1"); //will log "Test 1" to the console and pop up an alert
-  e.register.deregister(fn2);
-  e.fire("Test 2"); //will log "Test 2" to the console
-  */
-  $L.set($L, "Event", function(){
-    var _listeners = [];
-    var event = Lapiz.Map();
-
-    // > event.register(fn)
-    // > event.register = fn
-    // The event.register method takes a function. All registered functions will
-    // be called when the event fires.
-    $L.set.setterMethod(event, function register(fn){
-      $L.typeCheck.func(fn, "Event registration requires a function");
-      _listeners.push(fn);
-      return fn;
-    });
-
-    // > event.register.deregister(fn)
-    // > event.register.deregister = fn
-    // The event.register.deregister method takes a function. If that function
-    // has been registered with the event, it will be removed.
-    $L.set.setterMethod(event.register, function deregister(fn){
-      $L.remove(_listeners, fn);
-      return fn;
-    });
-
-    // > event.fire(args...)
-    // The event.fire method will call all functions that have been registered
-    // with the event. The arguments that are passed into fire will be passed
-    // into the registered functions.
-    $L.set.meth(event, function fire(){
-      if (!event.fire.enabled) { return event; }
-      var i;
-      // make a copy in case _listeners changes during fire event
-      var listeners = _listeners.slice(0);
-      var l = listeners.length;
-      for(i=0; i<l; i+=1){
-        listeners[i].apply(this, arguments);
-      }
-      return event;
-    });
-
-    // > event.fire.enabled
-    // > event.fire.enabled = x
-    // The event.enabled is a boolean that can be set to enable or disable the
-    // fire method. If event.fire.enable is false, even if event.fire is called,
-    // it will not call the registered functions.
-    $L.set.setterGetter(event.fire, "enabled", true, function(enable){ return !!enable; });
-
-    // > event.fire.length
-    // The event.length is a read-only property that returns the number of
-    // functions registered with the event.
-    $L.set.getter(event.fire, function length(){ return _listeners.length; });
-
-    $L.set(event, "_cls", $L.Event);
-
-    return event;
-  });
-
-  // > Lapiz.SingleEvent()
-  // A single event is an instance that will only fire once. Registering a
-  // function after the event has fired will result in the function being
-  // immedatly invoked with the arguments that were used when the event fired.
-  $L.set($L, "SingleEvent", function(){
-    var _event = $L.Event();
-    var _hasFired = false;
-    var _args;
-    var facade = $L.Map();
-
-    // > singleEvent.register
-    $L.set.meth(facade, function register(fn){
-      if (_hasFired){
-        fn.apply(this, _args);
-      } else {
-        _event.register(fn);
-      }
-    });
-
-    // > singleEvent.register.deregister
-    $L.set.meth(facade.register, function deregister(fn){
-      if (_hasFired) { return; }
-      _event.register.deregister(fn);
-    });
-
-    // > singleEvent.fire
-    $L.set.meth(facade, function fire(){
-      if (_hasFired || !_event.fire.enabled) { return; }
-      _hasFired = true;
-      _args = arguments;
-      _event.fire.apply(this, _args);
-      delete _event;
-    });
-    $L.set(facade, "_cls", $L.SingleEvent);
-
-    // > singleEvent.fire.enabled
-    Object.defineProperty(facade.fire, "enabled", {
-      get: function(){ return _event.fire.enabled; },
-      set: function(val) { _event.fire.enabled = val; }
-    });
-
-    return facade;
-  });
-
-  // > Lapiz.Event.linkProperty(obj, name, evt)
-  // > Lapiz.Event.linkProperty(obj, name)
-  // This is a helper function for linking an event to an object. It will be
-  // linked like a setter method:
-  /* >
-  var map = Lapiz.Map();
-  var e = Lapiz.Event.linkProperty(map, "foo");
-  // These two are the same
-  map.foo(function(){...});
-  map.foo = function(){...};
-
-  // To deregister
-  map.foo.deregister(fn);
-  */
-  // If no event is given, one is created. The even is returned (either way).
-  $L.set($L.Event, "linkProperty", function(obj, name, evt){
-    if (evt === undefined){
-      evt = $L.Event();
-    }
-    Object.defineProperty(obj, name, {
-      get: function(){ return evt.register; },
-      set: function(fn){ evt.register(fn); }
-    });
-    return evt;
-  });
-
-  $L.set($L, "on", $L.Map());
-});
-Lapiz.Module("Filter", function($L){
-
-  // > Lapiz.Filter(accessor, filterFunc(key, accessor) )
-  // > Lapiz.Filter(accessor, field, val)
-  // Filters an accessor based on a function of field.
-  //
-  // One edge case is that an accessor cannot filter by field
-  // for undefined. To do that, you have to create a function
-  // to check the field.
-  $L.set($L, "Filter", function(accessor, filterOrField, val){
-    var _index = [];
-
-    // > filter(key)
-    // Returns the value associated with key, if it exists in the filter
-    var self = function(key){
-      if (_index.indexOf(key) > -1) { return accessor(key); }
-    };
-
-    // > filter._cls
-    // Return Lapiz.Filter
-    $L.set(self, "_cls", $L.Filter);
-
-    // if filterOrField is a string, and val is set, create a function
-    // to check that field against the val
-    var filterFn = filterOrField;
-    if ($L.typeCheck.str(filterOrField) && val !== undefined){
-      filterFn = function(key, accessor){
-        return accessor(key)[filterOrField] === val;
-      };
-    }
-
-    $L.typeCheck.func(filterFn, "Filter must be invoked with function or attriubte and value");
-
-    accessor.each(function(val, key){
-      if (filterFn(key, accessor)) { _index.push(key); }
-    });
-
-    // > filter.Accessor
-    // Returns a reference to self
-    $L.set(self, "Accessor", self);
-
-    // > filter.Sort(sorterFunction)
-    // > filter.Sort(fieldName)
-    // Returns a Sorter
-    $L.set.meth(self, function Sort(funcOrField){ return $L.Sort(self, funcOrField); });
-
-    // > filter.Filter(filterFunction)
-    // > filter.Filter(field, val)
-    // Returns a filter.
-    $L.set.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
-
-    // > filter.has(key)
-    // Returns a bool indicating if the filter contains the key
-    $L.set.meth(self, function has(key){
-      return _index.indexOf(key.toString()) > -1;
-    });
-
-    // > filter.keys
-    // Returns an array of keys
-    $L.set.getter(self, function keys(){
-      return _index.slice(0);
-    });
-
-    // > filter.length
-    // Read-only property that returns the length
-    $L.set.getter(self, function length(){
-      return _index.length;
-    });
-
-    $L.set.meth(self, function each(fn){
-      var i;
-      var l = _index.length;
-      for(i=0; i<l; i+=1){
-        key = _index[i];
-        if (fn(accessor(key), key)) { return key; }
-      }
-    });
-
-    // > filter.on
-    // Namespace for filter events
-    $L.set(self, "on", $L.Map());
-
-    // > filter.on.insert( function(key, accessor) )
-    // > filter.on.insert = function(key, accessor)
-    // Registration for insert event which fires when a new value is added to
-    // the filter
-    var _insertEvent = $L.Event.linkProperty(self.on, "insert");
-
-    // > filter.on.change( function(key, accessor) )
-    // > filter.on.change = function(key, accessor)
-    // Registration of change event which fires when a new value is assigned to
-    // an existing key
-    var _changeEvent = $L.Event.linkProperty(self.on, "change");
-
-    // > filter.on.remove( function(key, val, accessor) )
-    // > filter.on.remove = function(key, val, accessor)
-    // Registration for remove event which fires when a value is removed
-    var _removeEvent = $L.Event.linkProperty(self.on, "remove");
-    Object.freeze(self.on);
-
-    function inFn(key, accessor){
-      key = key.toString();
-      if (filterFn(key, accessor)){
-        _index.push(key);
-        _insertEvent.fire(key, self);
-      }
-    }
-    function remFn(key, accessor, oldVal){
-      key = key.toString();
-      var i = _index.indexOf(key);
-      if (i > -1){
-        _index.splice(i, 1);
-        _removeEvent.fire(key, self, oldVal);
-      }
-    }
-    function changeFn(key, accessor, oldVal){
-      key = key.toString();
-      var i = _index.indexOf(key);
-      var f = filterFn(key, accessor);
-      if (i > -1){
-        if (f) {
-          // was in the list, still in the list, but changed
-          _changeEvent.fire(key, self, oldVal);
-        } else {
-          // was in the list, is not now
-          _index.splice(i, 1);
-          _removeEvent.fire(key, accessor(key), self);
-        }
-      } else {
-        if (f){
-          // was not in the list, is now
-          _index.push(key);
-          _insertEvent.fire(key, self);
-        }
-      }
-    }
-
-    accessor.on.insert(inFn);
-    accessor.on.remove(remFn);
-    accessor.on.change(changeFn);
-
-    // > filter.ForceRescan()
-    // Rescans all values from parent access and fires insert and remove events
-    $L.set.meth(self, function ForceRescan(){
-      accessor.each(function(val, key){
-        key = key.toString();
-        var willBeInSet = filterFn(key, accessor);
-        var idx = _index.indexOf(key)
-        var isInSet = (idx !== -1);
-        if (willBeInSet && !isInSet){
-          _index.push(key);
-          _insertEvent.fire(key, self);
-        } else if (!willBeInSet && isInSet){
-          _index.splice(idx, 1);
-          _removeEvent.fire(key, accessor(key), self);
-        }
-      });
-    });
-
-    // > filter.func(filterFunc(key, accessor))
-    // > filter.func = filterFunc(key, accessor)
-    // Changes the function used for the filter. The insert and remove events
-    // will fire as the members are scanned to check if they comply with the
-    // new members
-    $L.set.setterMethod(self, function func(fn){
-      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
-        filterFn.on.change.deregister(self.ForceRescan);
-      }
-      filterFn = fn;
-      if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
-        filterFn.on.change(self.ForceRescan);
-      }
-      self.ForceRescan();
-    });
-
-    // > filter.func.on.change
-    // If the function supplied for filter function has a change event,
-    // then when that event fires, it will force a rescan.
-    if ($L.typeCheck.nested(filterFn, "on", "change", "func")){
-      filterFn.on.change(self.ForceRescan);
-    }
-
-    // > filter.kill()
-    // After calling kill, a Filter is no longer live. It will not receive
-    // updates and can more easily be garbage collected (because it's
-    // parent accessor no longer has any references to it).
-    $L.set.meth(self, function kill(){
-      accessor.on.insert.deregister(inFn);
-      accessor.on.remove.deregister(remFn);
-      accessor.on.change.deregister(changeFn);
-      if ($L.typeCheck.nested(filterFn, "on", "change", "deregister", "func")){
-        filterFn.on.change.deregister(self.ForceRescan);
-      }
-    });
-
-    Object.freeze(self);
-    return self;
-  });
-});
-Lapiz.Module("Index", function($L){
-  // > Lapiz.Index(lapizClass)
-  // > Lapiz.Index(lapizClass, primaryFunc)
-  // > Lapiz.Index(lapizClass, primaryField)
-  // > Lapiz.Index(lapizClass, primary, domain)
-  // Adds an index to a class. If class.on.change and class.on.remove exist,
-  // the index will use these to keep itself up to date.
-  //
-  // Index needs a primary key. Any to entries with the same primary key are
-  // considered equivalent and one will overwrite the other. By default, Index
-  // assumes a primary property of "id". To use another field, pass in a string
-  // as primaryField. To generate a primary key from the data in the object,
-  // pass in a function as primaryFunc.
-  //
-  // By default, the Index methods will be attached directly to the class. If
-  // this would cause a namespace collision, a string can be provided as a
-  // domain and all methods will be attached in that namespace.
-  //
-  // The class does not have to be a lapizClass, but it must have a similar
-  // interface. Specifically, it must have cls.on.change and the instances of
-  // the class must have obj.on.change and obj.on.remove.
-  $L.set($L, "Index", function(cls, primaryFunc, domain){
-    if (primaryFunc === undefined){
-      primaryFunc = function(obj){return obj[$L.Index.defaultPrimary];};
-    } else if ($L.typeCheck.str(primaryFunc)){
-      primaryFunc = function(field){
-        return function(obj){
-          return obj[field];
-        };
-      }(primaryFunc);
-    } else if ( !$L.typeCheck.func(primaryFunc) ){
-      Lapiz.Err.toss("Expected a function or string");
-    }
-
-    if (domain === undefined) {
-      domain = cls;
-    } else {
-      cls[domain] = $L.Map();
-      domain = cls[domain];
-    }
-
-    var _primary = $L.Dictionary();
-
-    // > indexedClass.each( function(val, key))
-    domain.each = _primary.each;
-
-    // > indexedClass.has(key)
-    domain.has = _primary.has;
-
-    // > indexedClass.Filter(filterFunc)
-    // > indexedClass.Filter(filterField, val)
-    domain.Filter = _primary.Filter;
-
-    // > indexedClass.Sort(sortFunc)
-    // > indexedClass.Sort(sortField)
-    domain.Sort = _primary.Sort;
-
-    // > indexedClass.remove(key)
-    domain.remove = _primary.remove;
-
-    // > indexedClass.keys
-    Object.defineProperty(domain, "keys",{
-      get: function(){ return _primary.keys; }
-    });
-
-    // > indexedClass.all
-    Object.defineProperty(domain, "all",{
-      get: function(){ return _primary.Accessor; }
-    });
-
-    function _upsert(obj){
-      _primary(primaryFunc(obj), obj);
-    }
-
-    // > indexedClass.exclude
-    // This can be set to a function that takes an instance of the class and
-    // returns a boolean. If it returns true then the object will not be
-    // indexed.
-
-    cls.on.create(function(obj){
-      if ($L.typeCheck.nested(domain, "exclude", "func") && domain.exclude(obj)) {
-        return;
-      }
-      obj.on.change(_upsert);
-      obj.on.remove(function(obj){
-        if ($L.typeCheck.nested(obj, "on", "change", "deregister", "func")){
-          obj.on.change.deregister(_upsert);
-        }
-        _primary.remove(primaryFunc(obj));
-      });
-      _upsert(obj);
-    });
-
-    // > indexedClass.get(primaryKey)
-    // > indexedClass.get(field, val)
-    domain.get = function(idFuncOrAttr, val){
-      var matches = {};
-      if (val !== undefined){
-        _primary.each(function(obj, key){
-          if (obj[idFuncOrAttr] === val) { matches[key] = obj; }
-        });
-        return matches;
-      } else if (idFuncOrAttr instanceof Function){
-        _primary.each(function(obj, key){
-          if (idFuncOrAttr(obj)) { matches[key] = obj; }
-        });
-        return matches;
-      }
-      return _primary(idFuncOrAttr);
-    };
-
-    return cls;
-  });
-
-  // > Lapiz.Index.Class(constructor, primaryFunc, domain)
-  // Shorthand helper, constructor for an indexed class.
-  $L.set.meth($L.Index, function Cls(constructor, primaryFunc, domain){
-    return Lapiz.Index(Lapiz.Cls(constructor), primaryFunc, domain);
-  });
-
-  // > Lapiz.Index.defaultPrimary
-  // Sets the default primary key name. It defaults to "id".
-  $L.Index.defaultPrimary = "id";
 
 });
 Lapiz.Module("Obj", ["Events"], function($L){
