@@ -505,14 +505,19 @@ Lapiz.Module("Dictionary", function($L){
     });
 
     // > dict.Sort(sorterFunction)
-    // > dict.Sort(attribute)
-    // Returns a Sorter with the dictionary as the accessor
-    self.Sort = function(funcOrField){ return $L.Sort(self, funcOrField); };
+    // > dict.Sort(fieldName)
+    // Returns a Sorter
+    $L.set.meth(self, function Sort(funcOrField){ return $L.Sort(self, funcOrField); });
 
     // > dict.Filter(filterFunction)
-    // > dict.Filter(attribute, val)
-    // Returns a Filter with the dictionary as the accessor
-    self.Filter = function(filterOrAttr, val){ return $L.Filter(self, filterOrAttr, val); };
+    // > dict.Filter(field, val)
+    // Returns a dict.
+    $L.set.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
+
+    // > dict.GroupBy(attribute)
+    // > dict.GroupBy(groupByFunction)
+    // Returns a GroupBy with the dict as the accessor
+    $L.set.meth(self, function GroupBy(funcOrField){ return $L.GroupBy(self, funcOrField); });
 
     // > dict.Accessor
     // > dict.Accessor(key)
@@ -527,11 +532,12 @@ Lapiz.Module("Dictionary", function($L){
     // * accessor.on.remove
     // * accessor.Sort
     // * accessor.Filter
-    self.Accessor = function(key){
+    // * accessor.GroupBy
+    $L.set.meth(self, function Accessor(key){
       return _dict[key];
-    };
-    $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "&keys");
-    self.Accessor._cls = $L.Accessor;
+    });
+    $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "GroupBy", "&keys");
+    $L.set(self.Accessor, "_cls", $L.Accessor)
 
     Object.freeze(self.Accessor);
     Object.freeze(self);
@@ -759,6 +765,7 @@ Lapiz.Module("Filter", function($L){
     // > filter(key)
     // Returns the value associated with key, if it exists in the filter
     var self = function(key){
+      key = key.toString();
       if (_index.indexOf(key) > -1) { return accessor(key); }
     };
 
@@ -777,10 +784,6 @@ Lapiz.Module("Filter", function($L){
 
     $L.typeCheck.func(filterFn, "Filter must be invoked with function or attriubte and value");
 
-    // > filter.Accessor
-    // Returns a reference to self
-    $L.set(self, "Accessor", self);
-
     // > filter.Sort(sorterFunction)
     // > filter.Sort(fieldName)
     // Returns a Sorter
@@ -790,6 +793,11 @@ Lapiz.Module("Filter", function($L){
     // > filter.Filter(field, val)
     // Returns a filter.
     $L.set.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
+
+    // > filter.GroupBy(attribute)
+    // > filter.GroupBy(groupByFunction)
+    // Returns a GroupBy with the filter as the accessor
+    $L.set.meth(self, function GroupBy(funcOrField){ return $L.GroupBy(self, funcOrField); });
 
     // > filter.has(key)
     // Returns a bool indicating if the filter contains the key
@@ -937,12 +945,33 @@ Lapiz.Module("Filter", function($L){
       }
     });
 
+    // > filter.Accessor
+    // > filter.Accessor(key)
+    // The accessor is a read-only interface to the filter
+    //
+    // * accessor.length
+    // * accessor.keys
+    // * accessor.has(key)
+    // * accessor.each(fn(val, key))
+    // * accessor.on.insert
+    // * accessor.on.change
+    // * accessor.on.remove
+    // * accessor.Sort
+    // * accessor.Filter
+    // * accessor.GroupBy
+    $L.set(self, function Accessor(key){
+      return self(key);
+    });
+    $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "GroupBy", "&keys");
+    $L.set(self.Accessor, "_cls", $L.Accessor)
+
     // add initial values
     accessor.each(function(val, key){
       if (filterFn(key, accessor)) { _index.push(key); }
     });
 
     Object.freeze(self);
+    Object.freeze(self.Accessor);
     return self;
   });
 });
@@ -977,6 +1006,11 @@ Lapiz.Module("Group", function($L){
     // > group.Filter(field, val)
     // Returns a filter.
     $L.set.meth(self, function Filter(filterOrField, val){ return $L.Filter(self, filterOrField, val); });
+
+    // > group.GroupBy(attribute)
+    // > group.GroupBy(groupByFunction)
+    // Returns a GroupBy with the group as the accessor
+    $L.set.meth(self, function GroupBy(funcOrField){ return $L.GroupBy(self, funcOrField); });
 
     // > group.has(key)
     // Returns a bool indicating if the group contains the key
@@ -1111,6 +1145,7 @@ Lapiz.Module("Group", function($L){
     $L.set.copyProps(self.Accessor, self, "Accessor", "&length", "has", "each", "on", "Sort", "Filter", "&keys");
     self.Accessor._cls = $L.Accessor;
 
+    Object.freeze(self.Accessor);
     Object.freeze(self);
     return self;
   });
@@ -2553,8 +2588,10 @@ Lapiz.Module("Sorter", function($L){
     _index.sort(_sortFn);
 
     // > sort.has(key)
+    // On sort, the has method just passes through to the underlying accessor.
 
     // > sort.Accessor
+    // Returns the underlying accessor.
 
     // > sort.Sort(accessor, sorterFunc(keyA, keyB, accessor))
     // > sort.Sort(accessor, fieldName)
@@ -2570,8 +2607,15 @@ Lapiz.Module("Sorter", function($L){
     // through unnecessary layers of events. Better to create a filter on the
     // sorters accessor.
 
+    // > sort.GroupBy(accessor, filterFunc(key, accessor) )
+    // > sort.GroupBy(accessor, field, val)
+    // It is possible to create a GroupBy on a sorter, but it is not
+    // recommended. The sorting operations do not stack so this just passes the
+    // events through unnecessary layers of events. Better to create a GroupBy
+    // on the sorters accessor.
+
     // > sort.length
-    $L.set.copyProps(self, accessor, "has", "Accessor", "Sort", "Filter", "&length");
+    $L.set.copyProps(self, accessor, "has", "Accessor", "Sort", "Filter", "GroupBy", "&length");
 
     // > sort.keys
     // Read-only property. The keys will be in the order that the sorter has
