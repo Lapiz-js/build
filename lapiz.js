@@ -644,6 +644,12 @@ Lapiz.Module("Events", ["Collections"], function($L){
       return fn;
     });
 
+
+    // > event.register.length
+    // The event.register.length is a read-only property that returns the number
+    // of listeners registered with the event.
+    $L.set.getter(event.register, function length(){ return _listeners.length; });
+
     // > event.fire(args...)
     // The event.fire method will call all functions that have been registered
     // with the event. The arguments that are passed into fire will be passed
@@ -666,11 +672,6 @@ Lapiz.Module("Events", ["Collections"], function($L){
     // fire method. If event.fire.enable is false, even if event.fire is called,
     // it will not call the registered functions.
     $L.set.setterGetter(event.fire, "enabled", true, function(enable){ return !!enable; });
-
-    // > event.fire.length
-    // The event.length is a read-only property that returns the number of
-    // functions registered with the event.
-    $L.set.getter(event.fire, function length(){ return _listeners.length; });
 
     $L.set(event, "_cls", $L.Event);
 
@@ -1387,6 +1388,10 @@ Lapiz.Module("Index", ["Collections"], function($L){
     // > indexedClass.Sort(sortFunc)
     // > indexedClass.Sort(sortField)
     domain.Sort = _primary.Sort;
+
+    // > indexedClass.GroupBy(accessor, field)
+    // > indexedClass.GroupBy(accessor, groupKeyFn(key, accessor) )
+    domain.GroupBy = _primary.GroupBy;
 
     // > indexedClass.remove(key)
     domain.remove = _primary.remove;

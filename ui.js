@@ -232,10 +232,14 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
   }
 
   // > Lapiz.UI.bind(node, ctx, templator)
+  // > Lapiz.UI.bind(node)
   // Binds a context and node together using the templator. If no templator is
-  // given, it will inheir a templator from it's parent, if no parent is present
-  // it will use the standard templator Generally, it is better to call
+  // given, it will inheirit a templator from it's parent, if no parent is
+  // present it will use the standard templator. Generally, it is better to call
   // Lapiz.UI.render than Lapiz.UI.bind.
+  //
+  // If ctx and templator are undefined, the ctx and templator will be
+  // inheirited - they will be whatever they would have been.
   ui.meth(function bind(node, ctx, templator){
     var cur, i, attrName, attrVal, _props;
     if (node.nodeName.toLowerCase() === "script") { return; }
@@ -309,7 +313,7 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
         node.textContent = i;
       }
     }
-    if (node.nodeType === 1){ //Element node
+    if (node.nodeType === 1){ // Element node
       var attrTemplates = _props['attrTemplates'];
       if (attrTemplates === undefined){
         attrTemplates = $L.Map();
@@ -328,6 +332,17 @@ Lapiz.Module("UI", ["Collections", "Events", "Template", "Errors"], function($L)
           node.attributes[attrName].value = attrVal;
         }
         if ($L.UI.bindState.proceed === false) { break; }
+      }
+    }
+    if (node.nodeType === 8){ // Comment Node
+      // > tag:comment:bind(ctx)
+      // This is kind of a hack (but only a little one). By attaching a bind
+      // function to a comment node, that will be invoked during any bind pass.
+      // This allows logic to be added without adding tags that will render.
+      // A use case if an attribute removes the tag it was originally associated
+      // with, but may need to restore it on a later bind pass.
+      if ($L.typeCheck.func(node.bind)){
+        node.bind($L.UI.bindState.ctx);
       }
     }
 
@@ -765,81 +780,142 @@ Lapiz.Module("DefaultUIHelpers", ["UI"], function($L){
   // If the collection has Lapiz event wiring (an accessor such as a Dictionary)
   // the collection will automatically stay up to date with additions and
   // removals. To keep the contents up to date, also use live.
-  UI.attribute("repeat", function(templateNode, _, collection){
-    //TODO: Lapiz.UI.bindState.firstPass
-    var templator = UI.bindState.templator;
-    $L.assert(collection !== undefined, "Expected collection, got undefined: "+templateNode)
-    var insFn, delFn;
-    var index = $L.Map();
-    var parent = templateNode.parentNode;
-
-    var end = templateNode.ownerDocument.createComment("end of repeat");
-    parent.insertBefore(end, templateNode);
-    templateNode.removeAttribute("repeat");
-
-    var fn = function(val, key){
-      var clone = templateNode.cloneNode(true);
-      index[key] = clone;
-      UI.bind(clone, val, templator);
-      parent.insertBefore(clone, end);
-    };
-    if (collection.each instanceof Function){
-      collection.each(fn);
-    } else {
-      $L.each(collection, fn);
-    }
-
-    if (collection.on !== undefined){
-      if ($L.typeCheck.func(collection.on.insert)){
-        insFn = function(key, accessor){
-          var clone = templateNode.cloneNode(true);
-          var keys = accessor.keys;
-          var i = keys.indexOf(key);
-
-          if (i === keys.length-1){
-              parent.insertBefore(clone, end);
-          } else {
-            //insert before something
-            parent.insertBefore(clone, index[keys[i+1]]);
-          }
-
-          index[key] = clone;
-          UI.bind(clone, accessor(key));
-        };
-        collection.on.insert(insFn);
-        UI.on.remove(parent, function(){
-          collection.on.insert.deregister(insFn);
-        });
-      }
-
-      if ($L.typeCheck.func(collection.on.remove)){
-        delFn = function(key, accessor, oldObj){
-          var n = index[key];
-          delete index[key];
-          n.parentNode.removeChild(n);
-        };
-        collection.on.remove(delFn);
-        Lapiz.UI.on.remove(parent, function(){
-          collection.on.remove.deregister(delFn);
-        });
-      }
-
-      if ($L.typeCheck.func(collection.on.change) && delFn && insFn){
-        chgFn = function(key, accessor, oldVal){
-          // I'm not sure this is a good check, it may be indicative of a
-          // deeper problem.
-          if (index[key] !== undefined) {delFn(key, accessor, oldVal);}
-          insFn(key, accessor);
+  var repeaterProto = $L.Map();
+  repeaterProto.registerAll = function(){
+    var self = this;
+    if (this.collection.on !== undefined){
+      if ($L.typeCheck.func(this.collection.on.insert)){
+        this.deregisterInsFn = this.register(this.collection.on.insert, this.insFn);
+        if ((this.registrations&1) === 0){
+          UI.on.remove(this.parent, function(){
+            self.deregisterInsFn();
+          });
+          this.registrations |= 1;
         }
-        collection.on.change(chgFn);
-        UI.on.remove(parent, function(){
-          collection.on.change.deregister(chgFn);
-        });
+      }
+
+      if ($L.typeCheck.func(this.collection.on.remove)){
+        this.deregisterDelFn = this.register(this.collection.on.remove, this.delFn);
+        if ((this.registrations&2) === 0){
+          Lapiz.UI.on.remove(this.parent, function(){
+            self.deregisterDelFn();
+          });
+          this.registrations |= 2;
+        }
+      }
+
+      if ($L.typeCheck.func(this.collection.on.change)){
+        this.deregisterChgFn = this.register(this.collection.on.change, this.chgFn);
+        if ((this.registrations&4)=== 0){
+          UI.on.remove(this.parent, function(){
+            self.deregisterChgFn();
+          });
+          this.registrations |= 4;
+        }
       }
     }
+  };
+  $L.set.binder(repeaterProto, function insFn(key, accessor){
+    var clone = this.templateNode.cloneNode(true);
+    var keys = accessor.keys;
+    var i = keys.indexOf(key);
+
+    if (i === keys.length-1){
+      this.parent.insertBefore(clone, this.end);
+    } else {
+      //insert before something
+      this.parent.insertBefore(clone, this.index[keys[i+1]]);
+    }
+
+    this.index[key] = clone;
+    UI.bind(clone, accessor(key));
+  });
+  $L.set.binder(repeaterProto, function delFn(key, accessor, oldObj){
+    var n = this.index[key];
+    delete this.index[key];
+    n.parentNode.removeChild(n);
+  });
+  $L.set.binder(repeaterProto, function chgFn(key, accessor, oldVal){
+    // I'm not sure this is a good check, it may be indicative of a
+    // deeper problem.
+    if (this.index[key] !== undefined) {this.delFn(key, accessor, oldVal);}
+    this.insFn(key, accessor);
+  });
+  repeaterProto.register = function (event, fn){
+    //TODO: this is useful enought that maybe it belongs in the event space?
+    event(fn);
+    return function(){ event.deregister(fn); };
+  };
+  $L.set.binder(repeaterProto, function append(val, key){
+    var clone = this.templateNode.cloneNode(true);
+    this.index[key] = clone;
+    UI.bind(clone, val, this.templator);
+    this.parent.insertBefore(clone, this.end);
+  });
+  repeaterProto.populate = function(){
+    if (this.collection.each instanceof Function){
+      this.collection.each(this.append);
+    } else {
+      $L.each(this.collection, this.append);
+    }
+  };
+  UI.attribute("repeat", function(templateNode, ctx, collection){
+    $L.assert(collection !== undefined, "Expected collection, got undefined: "+templateNode)
+    
+    var repeater = {
+      "templateNode"  : templateNode,
+      "collection"    : collection,
+      "token"         : templateNode.attributes['repeat'].value,
+      "templator"     : UI.bindState.templator,
+      "index"         : $L.Map(),
+      "parent"        : templateNode.parentNode,
+      "registrations" : 0
+    };
+    repeater.end = templateNode.ownerDocument.createComment("end of "+repeater.token+" repeat")
+    repeater.__proto__ = repeaterProto;
+
+    var start = templateNode.ownerDocument.createComment("start of "+repeater.token+" repeat");
+    $L.set.meth(start, function bind(ctx){
+      var newCollection = repeater.templator(repeater.token, ctx);
+      if (newCollection !== repeater.collection){
+        // iterate through index and delete nodes
+        var i,n;
+        var keys = Object.keys(repeater.index); 
+        var ln = keys.length;
+        for (i=0; i<ln; i++){
+          n = repeater.index[keys[i]];
+          n.parentNode.removeChild(n);
+        }
+        repeater.index = $L.Map();
+        // deregister old collection
+        if (repeater.deregisterInsFn !== undefined){
+          repeater.deregisterInsFn();
+          repeater.deregisterInsFn = undefined;
+        }
+        if (repeater.delFn !== undefined){
+          repeater.deregisterDelFn();
+          repeater.deregisterDelFn = undefined;
+        }
+        if (repeater.chgFn !== undefined){
+          repeater.deregisterChgFn();
+          repeater.deregisterChgFn = undefined;
+        }
+        // iterate through new collection and add nodes
+        repeater.collection = newCollection;
+        repeater.populate();
+        // - register with new collection
+        repeater.registerAll();
+      }
+    });
+    repeater.parent.insertBefore(start, templateNode);
+    repeater.parent.insertBefore(repeater.end, templateNode);
+    repeater.templateNode.removeAttribute("repeat");
+
+    repeater.populate();
+    repeater.registerAll();
 
     //node.parentNode.removeChild(node);
-    templateNode.remove();
+    repeater.templateNode.remove();
     UI.bindState.proceed = false;
   }); //End Repeat attribute
 
