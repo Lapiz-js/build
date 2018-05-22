@@ -1912,17 +1912,6 @@ Lapiz.Module("Collections", function($L){
     });
   });
 
-  // > namespace
-  // The "this" object on a Namespace constructor.
-  /*>
-  var foo = Lapiz.Namespace(function(){
-    this.properties(...);
-    this.meth(...);
-    this.set(...);
-    // and so forth
-  });
-  */
-
   // This section builds up the namespace prototype
   var _nsProto = Map();
 
@@ -1957,10 +1946,33 @@ Lapiz.Module("Collections", function($L){
     }
   });
 
+  // > namespace.getter(namedGetterFunc() )
+  // > namespace.getter(name, getterFunc() )
+  // > namespace.getter([namedGetterFuncs...] )
+  // > namespace.getter({name: getterFunc...} )
+  $L.set.binder(_nsProto, function getter(){
+    if (arguments.length === 0){
+      $L.Err.toss("Namespace getter requires at least one argument");
+    } else if (arguments.length === 1){
+      $L.set.getter(this.namespace, arguments[0]);
+    } else {
+      $L.set.getter(this.namespace, arguments[0], arguments[1]);
+    }
+  });
+
   // > namespace = Lapiz.Namespace()
   // > namespace = Lapiz.Namespace(constructor)
   // Returns a namespace. If a constructor is given, the inner namespace is
   // returned, otherwise the namespace wrapper is returned.
+  // The "this" object on a Namespace constructor.
+  /*>
+  var foo = Lapiz.Namespace(function(){
+    this.properties(...);
+    this.meth(...);
+    this.set(...);
+    // and so forth
+  });
+  */
   $L.set($L, function Namespace(fn){
     var self = Object.create(_nsProto);
 
